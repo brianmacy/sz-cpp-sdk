@@ -41,12 +41,22 @@ parity** with the C# SDK (`sz-sdk-csharp@4.3.0`).
 `393269d` engine read → `1aea68e` engine write/why/how/graph →
 `2b9b500` demos + parity notes.
 
-## Open / next
+## CI / Docs — both GREEN (verified on GitHub Actions)
 
-- Watch the first GitHub Actions runs for the **Docs** (Pages deploy) and **CI**
-  workflows on these pushes (Doxygen not installable locally, so Pages is
-  CI-verified). Earlier rate-limit caveats apply to `gh` polling.
-- The combined `test/SzCoreEngineTest.cpp` (19, pre-split) is retained for its
-  extra FIX regressions; can be trimmed of overlap with the split files later.
+- **CI** (`Build & real-engine tests`): GREEN on `aaa3bf4` (run 28332450273) —
+  Install ✓ Configure ✓ Build ✓ Test ✓. This is the first green CI run. Two real
+  bugs were fixed to get there:
+  - the Senzing install hung forever because `sudo` stripped `SENZING_ACCEPT_EULA`
+    from the package postinst (fixed: pass it explicitly through `sudo`);
+  - configure failed the empty-submodule guard because checkout didn't fetch
+    submodules (fixed: `submodules: true` — needed for the nlohmann/json test dep).
+- **Docs** (Pages deploy): GREEN — Doxygen generation + Pages deploy succeed.
+
+## Notes
+
+- The combined `test/SzCoreEngineTest.cpp` has been **retired**; its coverage lives
+  in the 5 split engine suites + SzCoreEnvironmentTest (199 unique tests).
 - Coverage of the huge C# flag-combination matrices is represented by the C# flag
   *sets* (not the full cartesian products) — see suite headers.
+- Old pre-fix CI runs may still show `in_progress` until GitHub's 6h auto-timeout;
+  they were the hung EULA runs and are superseded by the green run above.
