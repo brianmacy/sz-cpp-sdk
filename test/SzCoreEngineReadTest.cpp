@@ -261,7 +261,26 @@ TEST_F(SzCoreEngineReadTest, TestSearchByAttributes) {
     const std::string exp = engine.SearchByAttributes(
         query, senzing::sdk::SzSearchByAttributesDefaultFlags);
     EXPECT_NE(exp.find("RESOLVED_ENTITIES"), std::string::npos);
+
+    // Regression: a two-arg search with an EMPTY profile must take the default-
+    // profile path and yield the identical result to the single-arg overload
+    // (mirrors the C#-aligned null/empty-profile routing).
+    const std::string emptyProfile = engine.SearchByAttributes(query, "");
+    EXPECT_EQ(emptyProfile, def)
+        << "empty-profile search diverged from the default-profile path";
     env->Destroy();
+}
+
+// Records that describe the same person across data sources resolve into the
+// same entity (e.g. PASSENGERS/ABC123 "Joe Schmoe" and EMPLOYEES/MNO345
+// "Joseph Schmoe" share address/phone/DOB).
+TEST_F(SzCoreEngineReadTest, ResolvesMatchingRecordsAcrossSources) {
+    EXPECT_EQ(s_recordToEntity.at({kPassengers, "ABC123"}),
+              s_recordToEntity.at({kEmployees, "MNO345"}))
+        << "matching cross-source records should resolve to one entity";
+    EXPECT_NE(s_recordToEntity.at({kPassengers, "ABC123"}),
+              s_recordToEntity.at({kPassengers, "DEF456"}))
+        << "distinct people should be distinct entities";
 }
 
 // Mirrors C# TestExportJsonEntityReport(+Defaults).

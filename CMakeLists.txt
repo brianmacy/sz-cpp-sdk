@@ -233,8 +233,7 @@ if(SZ_CPP_SDK_BUILD_TESTS)
         test/SzCoreEngineWriteTest.cpp
         test/SzCoreEngineWhyTest.cpp
         test/SzCoreEngineHowTest.cpp
-        test/SzCoreEngineGraphTest.cpp
-        test/SzCoreEngineTest.cpp)
+        test/SzCoreEngineGraphTest.cpp)
     target_compile_options(sz_cpp_sdk_tests PRIVATE -Wall -Wextra -Wpedantic)
     # test/ is on the include path so suites can pull in the shared header-only
     # repository fixture (test/sz_test_repo.hpp).
