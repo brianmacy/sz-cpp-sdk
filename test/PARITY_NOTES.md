@@ -38,6 +38,23 @@ public C++ analog. Those exceptions are listed here for transparency.
   in `SzCoreConfigTest`): depends on overriding the internal `DoExecute<T>`; no
   public C++ analog.
 
+## Scoping: engine flag-combination matrices (deliberate, disclosed)
+
+The C# engine suites (Read/Write/Why/How/Graph/SearchByAttributes) are heavily
+`[TestCaseSource]`-driven: each method runs across the cartesian product of flag
+sets × data-source/record keys × criteria, with deep per-flag `ValidateJsonDataMap`
+schema-key assertions and exact entity-ID / result-count checks.
+
+The C++ suites port every method, its default-vs-explicit-default equivalence, the
+error paths (unknown data source / not found), and — for GetEntity — iteration over
+the C# entity flag sets, asserting entity-ID consistency. They do **not** replicate
+the full flag-combination cartesian products nor the deep per-flag response-schema
+key assertions. That is a deliberate scoping choice: the exhaustive schema-key
+expectations are version-sensitive (they differ across Senzing point releases) and
+would couple the suite tightly to one engine build. Method coverage, error
+coverage, and resolution correctness are complete; exhaustive per-flag schema
+validation is not claimed.
+
 ## C#->C++ behavioral adaptations (documented in each suite's header)
 
 - Exceptions: C# `InnerException`/referential cause has no C++ analog; our

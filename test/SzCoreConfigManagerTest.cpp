@@ -15,9 +15,13 @@
 //                  TestReplaceDefaultConfigID, TestNotReplaceDefaultConfigID,
 //                  TestSetDefaultConfig, TestSetDefaultConfigWithComment
 //   not ported   : TestGetConfigApi, TestGetConfigManagerApi, TestExceptionFunctions
-//                  (C#-internal native-API accessors), and TestCreateConfigComment
-//                  (internal comment generator -- its output is validated via
-//                  TestGetConfigs).
+//                  (C#-internal native-API accessors). TestCreateConfigComment
+//                  exercises the internal SzCoreUtilities.CreateConfigComment parser
+//                  directly; that function is not part of our public surface, so its
+//                  happy-path OUTPUT is validated observably here via TestGetConfigs
+//                  (the "[ ONLY DEFAULT ]" and "Data Sources: CUSTOMERS, EMPLOYEES"
+//                  auto-comments). Its internal malformed-input branches are not
+//                  unit-tested (would require exposing the internal function).
 // Additive: HeldReferenceThrowsAfterDestroy (FIX C1 regression).
 #include <gtest/gtest.h>
 
