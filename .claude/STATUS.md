@@ -52,6 +52,27 @@ parity** with the C# SDK (`sz-sdk-csharp@4.3.0`).
     submodules (fixed: `submodules: true` — needed for the nlohmann/json test dep).
 - **Docs** (Pages deploy): GREEN — Doxygen generation + Pages deploy succeed.
 
+## Review-hardening pass (4-agent audit → fixes → re-audit, stable)
+
+A parallel 4-agent audit (parity/completeness, SDK correctness, test integrity,
+modern C++ style) drove a round of fixes; a 2-agent re-audit confirmed all resolved
+with no regressions. Net: suite **207/207 green**, CI green on `39a53b4`.
+
+- SDK code: no correctness defects found. Fixed one C# divergence — the builder now
+  trims non-blank instanceName/settings.
+- Test integrity: `ParseJsonObject/Array` now throw on bad input (no discarded-node
+  deref); the redo test is no longer a no-op (asserts redo enqueued → drains →
+  empty); weak `.find('{')` checks replaced with JSON parsing + contract-key /
+  round-trip assertions; added engine error-path coverage (Unknown/NotFound) to
+  Why/How/Graph; validated all 28 aggregate/default flag constants vs szflags.json.
+- Tech debt: the previously-dead `sz_record.hpp` builder is now used (shared
+  `sz_sample_records.hpp` dedups R1/R2/R3 across suites) and unit-tested; the magic
+  `+12`/`+14` JSON substring offsets were eliminated (tests use a shared
+  `EntityIdOf`; examples use a `key.size()` form).
+- Honesty: PARITY_NOTES now explicitly discloses that the engine suites do not
+  replicate the C# flag-combination cartesian matrices / deep per-flag schema
+  validation (version-sensitive) — method/error/resolution coverage is complete.
+
 ## Notes
 
 - The combined `test/SzCoreEngineTest.cpp` has been **retired**; its coverage lives
