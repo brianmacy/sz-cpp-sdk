@@ -12,25 +12,18 @@
 
 #include "abstract_test.hpp"
 #include "senzing/sdk/SzEngine.hpp"
+#include "senzing/sdk/SzException.hpp"
 #include "senzing/sdk/SzFlags.hpp"
+#include "sz_sample_records.hpp"
 
 namespace {
 
 using senzing::sdk::SzEngine;
+using senzing::sdk::SzNotFoundException;
+using senzing::sdk::SzUnknownDataSourceException;
 using senzing::sdk::test::AbstractTest;
 
-constexpr const char* kDS = "TEST";
-constexpr const char* kR1 =
-    R"({"DATA_SOURCE":"TEST","RECORD_ID":"R1","NAME_FULL":"Robert Smith",)"
-    R"("DATE_OF_BIRTH":"12/11/1978","ADDR_FULL":"123 Main St Las Vegas NV 89132",)"
-    R"("PHONE_NUMBER":"702-919-1300","EMAIL_ADDRESS":"bsmith@work.com"})";
-constexpr const char* kR2 =
-    R"({"DATA_SOURCE":"TEST","RECORD_ID":"R2","NAME_FULL":"Bob Smith",)"
-    R"("DATE_OF_BIRTH":"11/12/1978","ADDR_FULL":"123 Main Street Las Vegas NV 89132",)"
-    R"("PHONE_NUMBER":"702-919-1300","EMAIL_ADDRESS":"bsmith@work.com"})";
-constexpr const char* kR3 =
-    R"({"DATA_SOURCE":"TEST","RECORD_ID":"R3","NAME_FULL":"Jane Doe",)"
-    R"("DATE_OF_BIRTH":"05/05/1985","ADDR_FULL":"456 Elm St Reno NV 89501"})";
+constexpr const char* kDS = senzing::sdk::test::kSampleDataSource;
 
 class SzCoreEngineWhyTest : public AbstractTest<SzCoreEngineWhyTest> {
 protected:
@@ -45,19 +38,12 @@ public:
                        .VerboseLogging(false)
                        .Build();
         SzEngine& engine = env->GetEngine();
-        engine.AddRecord(kDS, "R1", kR1);
-        engine.AddRecord(kDS, "R2", kR2);
-        engine.AddRecord(kDS, "R3", kR3);
-        s_e1 = EntityIdOf(engine, "R1");
-        s_e3 = EntityIdOf(engine, "R3");
+        engine.AddRecord(kDS, "R1", senzing::sdk::test::SampleRecord1());
+        engine.AddRecord(kDS, "R2", senzing::sdk::test::SampleRecord2());
+        engine.AddRecord(kDS, "R3", senzing::sdk::test::SampleRecord3());
+        s_e1 = EntityIdOf(engine.GetEntity(kDS, "R1"));
+        s_e3 = EntityIdOf(engine.GetEntity(kDS, "R3"));
         env->Destroy();
-    }
-
-protected:
-    static int64_t EntityIdOf(SzEngine& engine, const std::string& recordID) {
-        const std::string j = engine.GetEntity(kDS, recordID);
-        const auto p = j.find("\"ENTITY_ID\":");
-        return p == std::string::npos ? -1 : std::stoll(j.substr(p + 12));
     }
 };
 
@@ -104,6 +90,17 @@ TEST_F(SzCoreEngineWhyTest, TestWhyRecords) {
     const std::string exp = engine.WhyRecords(
         kDS, "R1", kDS, "R2", senzing::sdk::SzWhyRecordsDefaultFlags);
     EXPECT_EQ(def, exp);
+    env->Destroy();
+}
+
+// Error paths: unknown data source and not-found record map to the right
+// exception subclasses (mirrors the C# exception cases).
+TEST_F(SzCoreEngineWhyTest, TestWhyErrors) {
+    auto env = NewEnvironment();
+    SzEngine& engine = env->GetEngine();
+    EXPECT_THROW(engine.WhyRecords("UNKNOWN", "R1", kDS, "R2"),
+                 SzUnknownDataSourceException);
+    EXPECT_THROW(engine.WhyRecordInEntity(kDS, "NOPE999"), SzNotFoundException);
     env->Destroy();
 }
 

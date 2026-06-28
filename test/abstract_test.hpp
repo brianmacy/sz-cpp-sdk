@@ -31,6 +31,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -123,29 +124,43 @@ protected:
 
     // ---- JSON helpers (mirror ParseJsonObject / ParseJsonArray) ----
 
-    /// Parses text as a JSON object, failing the test on parse error or wrong
-    /// kind. Comments are skipped, matching the C# JsonDocumentOptions.
+    /// Parses text as a JSON object. Throws std::runtime_error (surfaced by
+    /// GoogleTest as a failure) on a parse error or wrong kind, so callers never
+    /// operate on a discarded value. Comments are skipped (matches C#).
     static nlohmann::json ParseJsonObject(const std::string& text) {
         nlohmann::json node =
             nlohmann::json::parse(text, /*cb=*/nullptr,
                                   /*allow_exceptions=*/false,
                                   /*ignore_comments=*/true);
-        EXPECT_FALSE(node.is_discarded())
-            << "Failed to parse text as JSON: " << text;
-        EXPECT_TRUE(node.is_object()) << "JSON is not an object: " << text;
+        if (node.is_discarded() || !node.is_object()) {
+            throw std::runtime_error("Expected a JSON object but could not parse: " +
+                                     text);
+        }
         return node;
     }
 
-    /// Parses text as a JSON array, failing the test on parse error or wrong kind.
+    /// Parses text as a JSON array. Throws std::runtime_error on a parse error or
+    /// wrong kind (surfaced by GoogleTest as a failure).
     static nlohmann::json ParseJsonArray(const std::string& text) {
         nlohmann::json node =
             nlohmann::json::parse(text, /*cb=*/nullptr,
                                   /*allow_exceptions=*/false,
                                   /*ignore_comments=*/true);
-        EXPECT_FALSE(node.is_discarded())
-            << "Failed to parse text as JSON: " << text;
-        EXPECT_TRUE(node.is_array()) << "JSON is not an array: " << text;
+        if (node.is_discarded() || !node.is_array()) {
+            throw std::runtime_error("Expected a JSON array but could not parse: " +
+                                     text);
+        }
         return node;
+    }
+
+    /// Extracts RESOLVED_ENTITY.ENTITY_ID from an entity JSON document via the
+    /// JSON parser (replaces fragile hand-rolled substring scraping). Throws on
+    /// malformed input or a missing key.
+    static int64_t EntityIdOf(const std::string& entityJson) {
+        return ParseJsonObject(entityJson)
+            .at("RESOLVED_ENTITY")
+            .at("ENTITY_ID")
+            .get<int64_t>();
     }
 
     // ---- ValidateJsonDataMap[/Array] (mirror AbstractTest) ----

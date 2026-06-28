@@ -41,15 +41,19 @@ SzCoreEnvironment::Builder& SzCoreEnvironment::Builder::ConfigID(
 }
 
 std::unique_ptr<SzCoreEnvironment> SzCoreEnvironment::Builder::Build() {
-    // Normalize blank instance name / settings to the defaults (mirrors C#:
-    // a null/whitespace value falls back to DefaultInstanceName/DefaultSettings;
-    // a non-blank value is preserved verbatim).
-    const auto isBlank = [](const std::string& s) {
-        return s.find_first_not_of(" \t\n\r\f\v") == std::string::npos;
+    // Normalize instance name / settings (mirrors C# Builder): a null/whitespace
+    // value falls back to the default; a non-blank value is trimmed of leading and
+    // trailing whitespace.
+    const auto normalize = [](const std::string& s, const char* fallback) {
+        const auto first = s.find_first_not_of(" \t\n\r\f\v");
+        if (first == std::string::npos) {
+            return std::string{fallback};
+        }
+        const auto last = s.find_last_not_of(" \t\n\r\f\v");
+        return s.substr(first, last - first + 1);
     };
-    const std::string instanceName =
-        isBlank(instanceName_) ? kDefaultInstanceName : instanceName_;
-    const std::string settings = isBlank(settings_) ? kDefaultSettings : settings_;
+    const std::string instanceName = normalize(instanceName_, kDefaultInstanceName);
+    const std::string settings = normalize(settings_, kDefaultSettings);
     // Private constructor; use `new` since make_unique cannot access it.
     return std::unique_ptr<SzCoreEnvironment>(
         new SzCoreEnvironment(instanceName, settings, verboseLogging_, configID_));

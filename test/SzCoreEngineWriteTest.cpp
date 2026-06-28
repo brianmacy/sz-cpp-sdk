@@ -16,24 +16,17 @@
 #include "senzing/sdk/SzEngine.hpp"
 #include "senzing/sdk/SzException.hpp"
 #include "senzing/sdk/SzFlags.hpp"
+#include "sz_sample_records.hpp"
 
 namespace {
 
 using senzing::sdk::SzEngine;
 using senzing::sdk::test::AbstractTest;
 
-constexpr const char* kDataSource = "TEST";  // present in the default config
-constexpr const char* kRecord1 =
-    R"({"DATA_SOURCE":"TEST","RECORD_ID":"R1","NAME_FULL":"Robert Smith",)"
-    R"("DATE_OF_BIRTH":"12/11/1978","ADDR_FULL":"123 Main St Las Vegas NV 89132",)"
-    R"("PHONE_NUMBER":"702-919-1300","EMAIL_ADDRESS":"bsmith@work.com"})";
-constexpr const char* kRecord2 =
-    R"({"DATA_SOURCE":"TEST","RECORD_ID":"R2","NAME_FULL":"Bob Smith",)"
-    R"("DATE_OF_BIRTH":"11/12/1978","ADDR_FULL":"123 Main Street Las Vegas NV 89132",)"
-    R"("PHONE_NUMBER":"702-919-1300","EMAIL_ADDRESS":"bsmith@work.com"})";
-constexpr const char* kRecord3 =
-    R"({"DATA_SOURCE":"TEST","RECORD_ID":"R3","NAME_FULL":"Jane Doe",)"
-    R"("DATE_OF_BIRTH":"05/05/1985","ADDR_FULL":"456 Elm St Reno NV 89501"})";
+constexpr const char* kDataSource = senzing::sdk::test::kSampleDataSource;
+const std::string kRecord1 = senzing::sdk::test::SampleRecord1();
+const std::string kRecord2 = senzing::sdk::test::SampleRecord2();
+const std::string kRecord3 = senzing::sdk::test::SampleRecord3();
 
 class SzCoreEngineWriteTest : public AbstractTest<SzCoreEngineWriteTest> {};
 
@@ -72,8 +65,7 @@ TEST_F(SzCoreEngineWriteTest, TestGetStats) {
     auto env = NewEnvironment();
     SzEngine& engine = env->GetEngine();
     engine.AddRecord(kDataSource, "R1", kRecord1);
-    const std::string stats = engine.GetStats();
-    EXPECT_NE(stats.find('{'), std::string::npos) << "stats not JSON: " << stats;
+    ParseJsonObject(engine.GetStats());  // must be a JSON object
     env->Destroy();
 }
 
@@ -84,7 +76,8 @@ TEST_F(SzCoreEngineWriteTest, TestReevaluateRecord) {
     engine.AddRecord(kDataSource, "R1", kRecord1);
     const std::string info =
         engine.ReevaluateRecord(kDataSource, "R1", senzing::sdk::SzWithInfo);
-    EXPECT_NE(info.find('{'), std::string::npos);
+    EXPECT_TRUE(ParseJsonObject(info).contains("AFFECTED_ENTITIES"))
+        << "reevaluate-record with-info missing AFFECTED_ENTITIES: " << info;
     const std::string def = engine.ReevaluateRecord(kDataSource, "R1");
     const std::string exp = engine.ReevaluateRecord(
         kDataSource, "R1", senzing::sdk::SzReevaluateRecordDefaultFlags);
@@ -97,13 +90,11 @@ TEST_F(SzCoreEngineWriteTest, TestReevaluateEntity) {
     auto env = NewEnvironment();
     SzEngine& engine = env->GetEngine();
     engine.AddRecord(kDataSource, "R1", kRecord1);
-    const std::string entityJson = engine.GetEntity(kDataSource, "R1");
-    const auto idPos = entityJson.find("\"ENTITY_ID\":");
-    ASSERT_NE(idPos, std::string::npos);
-    const int64_t entityID = std::stoll(entityJson.substr(idPos + 12));
+    const int64_t entityID = EntityIdOf(engine.GetEntity(kDataSource, "R1"));
     const std::string info =
         engine.ReevaluateEntity(entityID, senzing::sdk::SzWithInfo);
-    EXPECT_NE(info.find('{'), std::string::npos);
+    EXPECT_TRUE(ParseJsonObject(info).contains("AFFECTED_ENTITIES"))
+        << "reevaluate-entity with-info missing AFFECTED_ENTITIES: " << info;
     const std::string def = engine.ReevaluateEntity(entityID);
     const std::string exp = engine.ReevaluateEntity(
         entityID, senzing::sdk::SzReevaluateEntityDefaultFlags);
@@ -140,7 +131,10 @@ TEST_F(SzCoreEngineWriteTest, TestRedoRecordsZero) {
     env->Destroy();
 }
 
-// Mirrors C# TestCountRedoRecordsNonZero / TestProcessRedoRecords.
+// Mirrors C# TestCountRedoRecordsNonZero / TestProcessRedoRecords. Deleting a
+// record from a multi-record entity enqueues redo work; we assert that work is
+// produced, then drain it -- each processed record returns a valid with-info
+// document -- and that the queue is empty afterward.
 TEST_F(SzCoreEngineWriteTest, TestProcessRedoRecords) {
     auto env = NewEnvironment();
     SzEngine& engine = env->GetEngine();
@@ -149,15 +143,21 @@ TEST_F(SzCoreEngineWriteTest, TestProcessRedoRecords) {
     engine.AddRecord(kDataSource, "R3", kRecord3);
     engine.DeleteRecord(kDataSource, "R2");
 
-    const int64_t count = engine.CountRedoRecords();
-    EXPECT_GE(count, 0);
-    if (count > 0) {
-        const std::string redo = engine.GetRedoRecord();
-        EXPECT_FALSE(redo.empty());
+    EXPECT_GT(engine.CountRedoRecords(), 0)
+        << "deleting a record from a multi-record entity should enqueue redo work";
+
+    int processed = 0;
+    for (std::string redo = engine.GetRedoRecord();
+         !redo.empty() && processed < 100; redo = engine.GetRedoRecord()) {
         const std::string info =
             engine.ProcessRedoRecord(redo, senzing::sdk::SzWithInfo);
-        EXPECT_NE(info.find('{'), std::string::npos);
+        EXPECT_TRUE(ParseJsonObject(info).contains("AFFECTED_ENTITIES"))
+            << "processed redo missing AFFECTED_ENTITIES: " << info;
+        ++processed;
     }
+    EXPECT_GT(processed, 0) << "expected to process at least one redo record";
+    EXPECT_EQ(engine.CountRedoRecords(), 0)
+        << "redo queue should be empty after draining";
     env->Destroy();
 }
 

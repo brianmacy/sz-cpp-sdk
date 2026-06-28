@@ -222,6 +222,7 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     add_executable(sz_cpp_sdk_tests
         test/SzExceptionTest.cpp
         test/SzEnvironmentDestroyedExceptionTest.cpp
+        test/SzRecordTest.cpp
         test/SzFlagsTest.cpp
         test/SzCoreEnvironmentTest.cpp
         test/SzCoreConfigTest.cpp

@@ -13,23 +13,19 @@
 
 #include "abstract_test.hpp"
 #include "senzing/sdk/SzEngine.hpp"
+#include "senzing/sdk/SzException.hpp"
 #include "senzing/sdk/SzFlags.hpp"
+#include "sz_sample_records.hpp"
 
 namespace {
 
 using senzing::sdk::SzEngine;
+using senzing::sdk::SzNotFoundException;
+using senzing::sdk::SzUnknownDataSourceException;
 using senzing::sdk::test::AbstractTest;
 using Key = std::pair<std::string, std::string>;
 
-constexpr const char* kDS = "TEST";
-constexpr const char* kR1 =
-    R"({"DATA_SOURCE":"TEST","RECORD_ID":"R1","NAME_FULL":"Robert Smith",)"
-    R"("DATE_OF_BIRTH":"12/11/1978","ADDR_FULL":"123 Main St Las Vegas NV 89132",)"
-    R"("PHONE_NUMBER":"702-919-1300","EMAIL_ADDRESS":"bsmith@work.com"})";
-constexpr const char* kR2 =
-    R"({"DATA_SOURCE":"TEST","RECORD_ID":"R2","NAME_FULL":"Bob Smith",)"
-    R"("DATE_OF_BIRTH":"11/12/1978","ADDR_FULL":"123 Main Street Las Vegas NV 89132",)"
-    R"("PHONE_NUMBER":"702-919-1300","EMAIL_ADDRESS":"bsmith@work.com"})";
+constexpr const char* kDS = senzing::sdk::test::kSampleDataSource;
 
 class SzCoreEngineHowTest : public AbstractTest<SzCoreEngineHowTest> {
 protected:
@@ -43,11 +39,9 @@ public:
                        .VerboseLogging(false)
                        .Build();
         SzEngine& engine = env->GetEngine();
-        engine.AddRecord(kDS, "R1", kR1);
-        engine.AddRecord(kDS, "R2", kR2);
-        const std::string j = engine.GetEntity(kDS, "R1");
-        const auto p = j.find("\"ENTITY_ID\":");
-        s_entityID = (p == std::string::npos) ? -1 : std::stoll(j.substr(p + 12));
+        engine.AddRecord(kDS, "R1", senzing::sdk::test::SampleRecord1());
+        engine.AddRecord(kDS, "R2", senzing::sdk::test::SampleRecord2());
+        s_entityID = EntityIdOf(engine.GetEntity(kDS, "R1"));
         env->Destroy();
     }
 };
@@ -72,6 +66,16 @@ TEST_F(SzCoreEngineHowTest, TestGetVirtualEntity) {
     const std::string exp =
         engine.GetVirtualEntity(keys, senzing::sdk::SzVirtualEntityDefaultFlags);
     EXPECT_EQ(def, exp);
+    env->Destroy();
+}
+
+// Error paths.
+TEST_F(SzCoreEngineHowTest, TestHowAndVirtualErrors) {
+    auto env = NewEnvironment();
+    SzEngine& engine = env->GetEngine();
+    EXPECT_THROW(engine.HowEntity(999999999L), SzNotFoundException);
+    const std::set<Key> badKeys = {{"UNKNOWN", "R1"}};
+    EXPECT_THROW(engine.GetVirtualEntity(badKeys), SzUnknownDataSourceException);
     env->Destroy();
 }
 

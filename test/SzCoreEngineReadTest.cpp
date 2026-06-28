@@ -25,6 +25,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "abstract_test.hpp"
 #include "senzing/sdk/SzEngine.hpp"
 #include "senzing/sdk/SzException.hpp"
@@ -132,21 +134,9 @@ public:
         }
         for (const auto& [key, json] : Records()) {
             (void)json;
-            s_recordToEntity[key] = EntityIdOf(engine, key.first, key.second);
+            s_recordToEntity[key] = EntityIdOf(engine.GetEntity(key.first, key.second));
         }
         env->Destroy();
-    }
-
-protected:
-    static int64_t EntityIdOf(SzEngine& engine, const std::string& ds,
-                              const std::string& recordID) {
-        const std::string entityJson = engine.GetEntity(ds, recordID);
-        const std::string keyText = "\"ENTITY_ID\":";
-        const auto pos = entityJson.find(keyText);
-        if (pos == std::string::npos) {
-            return -1;
-        }
-        return std::stoll(entityJson.substr(pos + keyText.size()));
     }
 };
 
@@ -173,13 +163,9 @@ TEST_F(SzCoreEngineReadTest, TestGetEntityByRecordID) {
     for (const auto& [key, entityID] : s_recordToEntity) {
         for (const SzFlags flags : EntityFlagSets()) {
             const std::string result = engine.GetEntity(key.first, key.second, flags);
-            const auto resolved = result.find("RESOLVED_ENTITY");
-            ASSERT_NE(resolved, std::string::npos)
-                << "No RESOLVED_ENTITY: " << result;
-            const auto idPos = result.find("\"ENTITY_ID\":");
-            ASSERT_NE(idPos, std::string::npos);
-            EXPECT_EQ(std::stoll(result.substr(idPos + 12)), entityID)
-                << "Unexpected entity ID for " << key.first << "/" << key.second;
+            EXPECT_EQ(EntityIdOf(result), entityID)
+                << "Unexpected entity ID for " << key.first << "/" << key.second
+                << " with flags " << flags.Value();
         }
     }
     env->Destroy();
@@ -195,11 +181,7 @@ TEST_F(SzCoreEngineReadTest, TestGetEntityByEntityID) {
             continue;
         }
         for (const SzFlags flags : EntityFlagSets()) {
-            const std::string result = engine.GetEntity(entityID, flags);
-            ASSERT_NE(result.find("RESOLVED_ENTITY"), std::string::npos);
-            const auto idPos = result.find("\"ENTITY_ID\":");
-            ASSERT_NE(idPos, std::string::npos);
-            EXPECT_EQ(std::stoll(result.substr(idPos + 12)), entityID);
+            EXPECT_EQ(EntityIdOf(engine.GetEntity(entityID, flags)), entityID);
         }
     }
     env->Destroy();
@@ -225,8 +207,10 @@ TEST_F(SzCoreEngineReadTest, TestGetRecord) {
         const std::string exp = engine.GetRecord(
             key.first, key.second, senzing::sdk::SzRecordDefaultFlags);
         EXPECT_EQ(def, exp) << "GetRecord default vs explicit-default mismatch";
-        EXPECT_NE(def.find("\"RECORD_ID\""), std::string::npos)
-            << "GetRecord missing RECORD_ID: " << def;
+        // Round-trip identity: the returned record echoes the requested key.
+        const nlohmann::json record = ParseJsonObject(def);
+        EXPECT_EQ(record.value("DATA_SOURCE", ""), key.first);
+        EXPECT_EQ(record.value("RECORD_ID", ""), key.second);
     }
     EXPECT_THROW(engine.GetRecord(kUnknown, "ABC123"),
                  SzUnknownDataSourceException);
@@ -239,13 +223,9 @@ TEST_F(SzCoreEngineReadTest, TestFindInterestingEntities) {
     auto env = NewEnvironment();
     SzEngine& engine = env->GetEngine();
     const auto& [key, entityID] = *s_recordToEntity.begin();
-    const std::string byRecord =
-        engine.FindInterestingEntities(key.first, key.second);
-    EXPECT_NE(byRecord.find('{'), std::string::npos)
-        << "FindInterestingEntities(by record) not JSON: " << byRecord;
-    const std::string byEntity = engine.FindInterestingEntities(entityID);
-    EXPECT_NE(byEntity.find('{'), std::string::npos)
-        << "FindInterestingEntities(by entity) not JSON: " << byEntity;
+    // Both overloads must return a JSON object (ParseJsonObject throws otherwise).
+    ParseJsonObject(engine.FindInterestingEntities(key.first, key.second));
+    ParseJsonObject(engine.FindInterestingEntities(entityID));
     env->Destroy();
 }
 

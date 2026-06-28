@@ -105,9 +105,13 @@ protected:
                 s_expected[name] =
                     ExpectedFlag{value, {groups.begin(), groups.end()}};
             }
+            s_allValues[name] = value;  // every entry, individual or aggregate
         }
         ASSERT_FALSE(s_expected.empty());
     }
+
+    // name -> szflags.json value, for ALL entries (individual + aggregate).
+    static inline std::map<std::string, int64_t> s_allValues;
 };
 
 // Mirrors TestEnumFlag/TestNamedMappings: every individual flag's value matches
@@ -121,6 +125,54 @@ TEST_F(SzFlagsTest, IndividualFlagValuesMatchMetadata) {
         ASSERT_NE(it, byName.end()) << "Missing individual flag: " << name;
         EXPECT_EQ(it->second.Value(), expected.value)
             << "Value mismatch for flag: " << name;
+    }
+}
+
+// Validates every aggregate / per-method-default flag CONSTANT against its
+// szflags.json value (mirrors the C# TestFlagsConstant/TestMetaFlag coverage of
+// the aggregate symbols). These constants are baked into the engine method
+// default-flag parameters, so a generator emitting a wrong value here would
+// otherwise go undetected.
+TEST_F(SzFlagsTest, AggregateFlagValuesMatchMetadata) {
+    using namespace senzing::sdk;
+    const std::vector<std::pair<std::string, SzFlags>> aggregates = {
+        {"SzExportIncludeAllEntities", SzExportIncludeAllEntities},
+        {"SzExportIncludeAllHavingRelationships",
+         SzExportIncludeAllHavingRelationships},
+        {"SzEntityIncludeAllRelations", SzEntityIncludeAllRelations},
+        {"SzSearchIncludeAllEntities", SzSearchIncludeAllEntities},
+        {"SzRecordDefaultFlags", SzRecordDefaultFlags},
+        {"SzEntityCoreFlags", SzEntityCoreFlags},
+        {"SzEntityDefaultFlags", SzEntityDefaultFlags},
+        {"SzEntityBriefDefaultFlags", SzEntityBriefDefaultFlags},
+        {"SzExportDefaultFlags", SzExportDefaultFlags},
+        {"SzFindPathDefaultFlags", SzFindPathDefaultFlags},
+        {"SzFindNetworkDefaultFlags", SzFindNetworkDefaultFlags},
+        {"SzWhyEntitiesDefaultFlags", SzWhyEntitiesDefaultFlags},
+        {"SzWhyRecordsDefaultFlags", SzWhyRecordsDefaultFlags},
+        {"SzWhyRecordInEntityDefaultFlags", SzWhyRecordInEntityDefaultFlags},
+        {"SzWhySearchDefaultFlags", SzWhySearchDefaultFlags},
+        {"SzHowEntityDefaultFlags", SzHowEntityDefaultFlags},
+        {"SzVirtualEntityDefaultFlags", SzVirtualEntityDefaultFlags},
+        {"SzAddRecordDefaultFlags", SzAddRecordDefaultFlags},
+        {"SzDeleteRecordDefaultFlags", SzDeleteRecordDefaultFlags},
+        {"SzRecordPreviewDefaultFlags", SzRecordPreviewDefaultFlags},
+        {"SzReevaluateRecordDefaultFlags", SzReevaluateRecordDefaultFlags},
+        {"SzReevaluateEntityDefaultFlags", SzReevaluateEntityDefaultFlags},
+        {"SzFindInterestingEntitiesDefaultFlags",
+         SzFindInterestingEntitiesDefaultFlags},
+        {"SzSearchByAttributesAll", SzSearchByAttributesAll},
+        {"SzSearchByAttributesStrong", SzSearchByAttributesStrong},
+        {"SzSearchByAttributesMinimalAll", SzSearchByAttributesMinimalAll},
+        {"SzSearchByAttributesMinimalStrong", SzSearchByAttributesMinimalStrong},
+        {"SzSearchByAttributesDefaultFlags", SzSearchByAttributesDefaultFlags},
+    };
+    for (const auto& [name, constant] : aggregates) {
+        auto it = s_allValues.find(name);
+        ASSERT_NE(it, s_allValues.end())
+            << "Aggregate flag not found in szflags.json: " << name;
+        EXPECT_EQ(constant.Value(), it->second)
+            << "Aggregate flag value mismatch for " << name;
     }
 }
 
