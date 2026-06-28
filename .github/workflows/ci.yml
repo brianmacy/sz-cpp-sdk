@@ -53,8 +53,10 @@ jobs:
       LD_LIBRARY_PATH: /opt/senzing/er/lib
 
     steps:
-      - name: Checkout
+      - name: Checkout (with submodules for the nlohmann/json test dependency)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          submodules: true
 
       - name: Install build dependencies
         run: |
