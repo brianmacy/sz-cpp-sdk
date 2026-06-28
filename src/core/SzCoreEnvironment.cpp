@@ -1,6 +1,7 @@
 // SzCoreEnvironment.cpp -- native-backed SzEnvironment implementation.
 #include "senzing/sdk/core/SzCoreEnvironment.hpp"
 
+#include <stdexcept>
 #include <utility>
 
 #include "native_ffi.hpp"
@@ -40,12 +41,31 @@ SzCoreEnvironment::Builder& SzCoreEnvironment::Builder::ConfigID(
 }
 
 std::unique_ptr<SzCoreEnvironment> SzCoreEnvironment::Builder::Build() {
+    // Normalize blank instance name / settings to the defaults (mirrors C#:
+    // a null/whitespace value falls back to DefaultInstanceName/DefaultSettings;
+    // a non-blank value is preserved verbatim).
+    const auto isBlank = [](const std::string& s) {
+        return s.find_first_not_of(" \t\n\r\f\v") == std::string::npos;
+    };
+    const std::string instanceName =
+        isBlank(instanceName_) ? kDefaultInstanceName : instanceName_;
+    const std::string settings = isBlank(settings_) ? kDefaultSettings : settings_;
     // Private constructor; use `new` since make_unique cannot access it.
-    return std::unique_ptr<SzCoreEnvironment>(new SzCoreEnvironment(
-        instanceName_, settings_, verboseLogging_, configID_));
+    return std::unique_ptr<SzCoreEnvironment>(
+        new SzCoreEnvironment(instanceName, settings, verboseLogging_, configID_));
 }
 
 SzCoreEnvironment::Builder SzCoreEnvironment::NewBuilder() { return Builder{}; }
+
+// ---- Per-process singleton enforcement (mirrors C# active-instance) ----
+
+std::mutex SzCoreEnvironment::s_classMutex_;
+SzCoreEnvironment* SzCoreEnvironment::s_activeInstance_ = nullptr;
+
+SzCoreEnvironment* SzCoreEnvironment::GetActiveInstance() {
+    std::lock_guard<std::mutex> guard(s_classMutex_);
+    return s_activeInstance_;
+}
 
 // ---- Construction / destruction ----
 
@@ -55,7 +75,17 @@ SzCoreEnvironment::SzCoreEnvironment(std::string instanceName,
     : instanceName_(std::move(instanceName)),
       settings_(std::move(settings)),
       verboseLogging_(verboseLogging),
-      configID_(configID) {}
+      configID_(configID) {
+    // Enforce the per-process singleton: a second active environment is a misuse
+    // error (mirrors C#'s InvalidOperationException -> our std::logic_error).
+    std::lock_guard<std::mutex> guard(s_classMutex_);
+    if (s_activeInstance_ != nullptr) {
+        throw std::logic_error(
+            "Only one active SzEnvironment is permitted per process; the "
+            "existing instance must be destroyed first.");
+    }
+    s_activeInstance_ = this;
+}
 
 SzCoreEnvironment::~SzCoreEnvironment() { Destroy(); }
 
@@ -196,6 +226,14 @@ void SzCoreEnvironment::Destroy() {
         coreEngine_->Destroy();
     }
     destroyed_ = true;
+
+    // Release the per-process singleton slot so a new environment may be built.
+    {
+        std::lock_guard<std::mutex> classGuard(s_classMutex_);
+        if (s_activeInstance_ == this) {
+            s_activeInstance_ = nullptr;
+        }
+    }
 }
 
 bool SzCoreEnvironment::IsDestroyed() {

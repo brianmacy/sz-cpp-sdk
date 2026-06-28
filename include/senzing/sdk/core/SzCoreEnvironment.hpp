@@ -55,6 +55,12 @@ public:
     /// Creates a new builder.
     static Builder NewBuilder();
 
+    /// The single active environment instance for this process, or nullptr if
+    /// none is active. Mirrors C# SzCoreEnvironment.GetActiveInstance(). The
+    /// environment is a per-process singleton: constructing a second instance
+    /// while one is active throws std::logic_error; Destroy() clears it.
+    static SzCoreEnvironment* GetActiveInstance();
+
     ~SzCoreEnvironment() override;
 
     SzCoreEnvironment(const SzCoreEnvironment&) = delete;
@@ -111,6 +117,10 @@ private:
 
     mutable std::mutex monitor_;
     bool destroyed_{false};
+
+    // Per-process singleton enforcement (mirrors C# active-instance pattern).
+    static std::mutex s_classMutex_;
+    static SzCoreEnvironment* s_activeInstance_;
 
     std::unique_ptr<SzCoreProduct> coreProduct_;
     std::unique_ptr<SzCoreConfigManager> coreConfigManager_;

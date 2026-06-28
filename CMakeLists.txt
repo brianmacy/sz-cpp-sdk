@@ -217,6 +217,7 @@ if(SZ_CPP_SDK_BUILD_TESTS)
         test/SzExceptionTest.cpp
         test/SzEnvironmentDestroyedExceptionTest.cpp
         test/SzFlagsTest.cpp
+        test/SzCoreEnvironmentTest.cpp
         test/SzCoreConfigTest.cpp
         test/SzCoreProductTest.cpp
         test/SzCoreConfigManagerTest.cpp
