@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "sz-cpp-sdk",
+  "version": "4.3.0",
+  "description": "C++ SDK for Senzing v4 entity resolution, patterned after the official C# SDK.",
+  "homepage": "https://github.com/senzing-garage",
+  "license": "Apache-2.0",
+  "dependencies": [
+    {
+      "name": "gtest",
+      "platform": "!staticcrt"
+    }
+  ],
+  "builtin-baseline": "0000000000000000000000000000000000000000"
+}

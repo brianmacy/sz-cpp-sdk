@@ -1,0 +1,101 @@
+# CI for sz-cpp-sdk: build the C++ SDK and run the real-engine GoogleTest suite.
+#
+# The tests run against the REAL native Senzing engine (no mocks), so the job
+# must provision a complete Senzing 4.4.x runtime at the exact /opt/senzing/...
+# paths the SDK and tests hardcode.
+#
+# Install method & sources (verified, not from memory):
+#   * Method: official apt repository on ubuntu-latest (NOT the container image).
+#     Rationale: the `senzing/senzingsdk-runtime` image does NOT ship the
+#     `G2C.db` template the tests read (it carries only `G2C.db.template`); that
+#     file is owned by the `senzingsdk-poc` package. Installing the right
+#     packages via apt onto ubuntu-latest puts every file at the canonical
+#     /opt/senzing path with no container/path mismatch.
+#   * Repo bootstrap: the `senzingrepo` package (senzingrepo_2.0.1-1_all.deb from
+#     senzing-production-apt.s3.amazonaws.com) — the OS-detecting apt configurer
+#     documented by the Senzing MCP `sdk_guide` topic=install, platform=linux_apt.
+#     Do NOT hand-add the legacy dists/stable URL (libssl1.1-only, per MCP).
+#
+# Package selection (confirmed via `dpkg -S` on the validated local 4.4.0 install
+# and the apt Packages indices):
+#   * senzingsdk-runtime  -> libSz.so, native C headers (/opt/senzing/er/sdk/c),
+#                            szflags.json + szerrors.json (codegen inputs at
+#                            CMake configure time), /etc/opt/senzing config, and
+#                            /opt/senzing/data support files.
+#   * senzingsdk-poc      -> /opt/senzing/er/resources/templates/G2C.db, the
+#                            schema-only template each test copies (kTemplateDb in
+#                            test/sz_test_repo.hpp). `senzingsdk-setup` does NOT
+#                            provide it; `senzingsdk-poc` does.
+#
+# Version pinning (4.4.x line, per task requirement):
+#   The 4.4.x line is currently published ONLY in the senzing-staging-apt repo
+#   (production tops out at 4.3.2; the locally validated build is 4.4.0). The
+#   `senzingrepo` package installs /etc/apt/sources.list.d/senzing-staging.list
+#   but leaves it commented; the step below un-comments it before installing the
+#   pinned 4.4.0 packages. Bump SENZING_VERSION as 4.4.x advances / promotes to
+#   production (and drop the staging-enable step once it lands there).
+#
+# EULA: installing Senzing requires accepting the Senzing EULA
+# (https://senzing.com/senzing-eula). CI asserts acceptance via the documented
+# SENZING_ACCEPT_EULA env var; running this workflow constitutes that acceptance.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build & real-engine tests (Senzing 4.4.x)
+    runs-on: ubuntu-latest
+
+    env:
+      # Senzing 4.4.x is published in the staging apt repo today (see header).
+      SENZING_VERSION: "4.4.0"
+      SENZING_ACCEPT_EULA: "I_ACCEPT_THE_SENZING_EULA"
+      SENZING_REPO_DEB: "senzingrepo_2.0.1-1_all.deb"
+      SENZING_REPO_URL: "https://senzing-production-apt.s3.amazonaws.com"
+      DEBIAN_FRONTEND: noninteractive
+      LD_LIBRARY_PATH: /opt/senzing/er/lib
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ python3 git ca-certificates wget
+
+      - name: Configure Senzing apt repository
+        run: |
+          wget -q "${SENZING_REPO_URL}/${SENZING_REPO_DEB}"
+          sudo apt-get install -y "./${SENZING_REPO_DEB}"
+          # 4.4.x lives in the staging dist, which senzingrepo ships commented out.
+          sudo sed -i 's/^#deb /deb /' /etc/apt/sources.list.d/senzing-staging.list
+          sudo apt-get update
+
+      - name: Install Senzing runtime (libSz, headers, config, data) + poc (G2C.db template)
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            "senzingsdk-runtime=${SENZING_VERSION}-*" \
+            "senzingsdk-poc=${SENZING_VERSION}-*"
+          # Fail loudly now if any path the build/tests depend on is missing.
+          test -f /opt/senzing/er/lib/libSz.so
+          test -d /opt/senzing/er/sdk/c
+          test -f /opt/senzing/er/sdk/szflags.json
+          test -f /opt/senzing/er/sdk/szerrors.json
+          test -d /etc/opt/senzing
+          test -d /opt/senzing/data
+          test -f /opt/senzing/er/resources/templates/G2C.db
+
+      - name: Configure (CMake + Ninja, C++20, Debug)
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test (real engine; CTest applies the ASan/LD_PRELOAD wiring)
+        run: ctest --test-dir build --output-on-failure

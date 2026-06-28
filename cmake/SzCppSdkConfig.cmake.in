@@ -1,0 +1,13 @@
+@PACKAGE_INIT@
+
+# SzCppSdkConfig.cmake -- package config for find_package(SzCppSdk).
+#
+# Exposes the imported target SzCppSdk::sz_cpp_sdk with its public include dirs
+# and the libSz usage requirement. The native Senzing shared library (libSz.so)
+# is a runtime/link dependency of the SDK; it is referenced by the absolute path
+# baked into the export at build time (default /opt/senzing/er/lib/libSz.so).
+# A consumer machine therefore needs the matching Senzing install present.
+
+include("${CMAKE_CURRENT_LIST_DIR}/SzCppSdkTargets.cmake")
+
+check_required_components(SzCppSdk)
