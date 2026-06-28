@@ -222,6 +222,7 @@ if(SZ_CPP_SDK_BUILD_TESTS)
         test/SzCoreProductTest.cpp
         test/SzCoreConfigManagerTest.cpp
         test/SzCoreDiagnosticTest.cpp
+        test/SzCoreEngineBasicsTest.cpp
         test/SzCoreEngineTest.cpp)
     target_compile_options(sz_cpp_sdk_tests PRIVATE -Wall -Wextra -Wpedantic)
     # test/ is on the include path so suites can pull in the shared header-only
