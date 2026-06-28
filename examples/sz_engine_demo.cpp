@@ -30,9 +30,10 @@ constexpr const char* kR3 =
     R"("DATE_OF_BIRTH":"05/05/1985","ADDR_FULL":"456 Elm St Reno NV 89501"})";
 
 int64_t EntityIdOf(senzing::sdk::SzEngine& engine, const std::string& recordID) {
+    const std::string key = "\"ENTITY_ID\":";
     const std::string j = engine.GetEntity(kDS, recordID);
-    const auto p = j.find("\"ENTITY_ID\":");
-    return p == std::string::npos ? -1 : std::stoll(j.substr(p + 12));
+    const auto p = j.find(key);
+    return p == std::string::npos ? -1 : std::stoll(j.substr(p + key.size()));
 }
 }  // namespace
 

@@ -39,10 +39,11 @@ int main() {
             R"("PHONE_NUMBER":"702-555-1212"})");
         const std::string entity = engine.GetEntity(
             "TEST", "D1", senzing::sdk::SzEntityIncludeAllFeatures);
-        const auto pos = entity.find("\"LIB_FEAT_ID\":");
+        const std::string key = "\"LIB_FEAT_ID\":";
+        const auto pos = entity.find(key);
         if (pos != std::string::npos) {
             const int64_t featureID =
-                std::stoll(entity.substr(pos + 14));
+                std::stoll(entity.substr(pos + key.size()));
             std::cout << "GetFeature(" << featureID << "):\n"
                       << diagnostic.GetFeature(featureID) << "\n\n";
         }
