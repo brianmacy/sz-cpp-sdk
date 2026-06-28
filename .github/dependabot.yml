@@ -1,0 +1,12 @@
+# Dependabot configuration.
+# 21-day cooldown gives the security community time to detect compromised
+# releases before they reach our build (cooldown applies to routine version
+# bumps only; GHSA security advisories bypass it and land fast).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 21
