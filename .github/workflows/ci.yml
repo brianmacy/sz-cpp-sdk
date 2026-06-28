@@ -70,7 +70,13 @@ jobs:
 
       - name: Install Senzing runtime + setup (libSz, headers, config, schema SQL)
         run: |
-          sudo apt-get install -y --no-install-recommends \
+          # `sudo` resets the environment, so SENZING_ACCEPT_EULA must be passed
+          # explicitly through to the package postinst -- otherwise it blocks
+          # waiting for EULA acceptance and the job hangs. Pass DEBIAN_FRONTEND
+          # too so debconf never prompts.
+          sudo SENZING_ACCEPT_EULA="${SENZING_ACCEPT_EULA}" \
+               DEBIAN_FRONTEND=noninteractive \
+               apt-get install -y --no-install-recommends \
             "senzingsdk-runtime=${SENZING_VERSION}-*" \
             "senzingsdk-setup=${SENZING_VERSION}-*"
           # Fail loudly now if any path the build/tests depend on is missing.
