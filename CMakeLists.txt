@@ -191,6 +191,18 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
 
+    # nlohmann/json -- vendored as a pinned git submodule (third_party/nlohmann_json,
+    # tag v3.11.3, MIT) so the build is fully local with no configure-time network
+    # fetch. Test-only: the SDK surface stays JSON-model-free; the test harness uses
+    # it for ValidateJsonDataMap-style exact key-set validation (mirroring the C#
+    # suite's System.Text.Json usage). Header-only target nlohmann_json::nlohmann_json.
+    set(JSON_BuildTests OFF CACHE INTERNAL "")  # do not build nlohmann's own test suite
+    if(NOT EXISTS "${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/CMakeLists.txt")
+        message(FATAL_ERROR
+            "third_party/nlohmann_json is empty -- run: git submodule update --init")
+    endif()
+    add_subdirectory(third_party/nlohmann_json EXCLUDE_FROM_ALL)
+
     # dlopen interposer: strips RTLD_DEEPBIND so libSz's SQLite plugin load is
     # compatible with the ASan runtime (see test/sz_no_deepbind.c for the full
     # rationale). Built WITHOUT ASan (plain C, its own target) and preloaded for
@@ -202,6 +214,10 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     endif()
 
     add_executable(sz_cpp_sdk_tests
+        test/SzExceptionTest.cpp
+        test/SzEnvironmentDestroyedExceptionTest.cpp
+        test/SzFlagsTest.cpp
+        test/SzCoreConfigTest.cpp
         test/SzCoreProductTest.cpp
         test/SzCoreConfigManagerTest.cpp
         test/SzCoreDiagnosticTest.cpp
@@ -211,7 +227,8 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     # repository fixture (test/sz_test_repo.hpp).
     target_include_directories(sz_cpp_sdk_tests PRIVATE "${CMAKE_SOURCE_DIR}/test")
     target_link_libraries(sz_cpp_sdk_tests
-        PRIVATE sz_cpp_sdk GTest::gtest GTest::gtest_main)
+        PRIVATE sz_cpp_sdk GTest::gtest GTest::gtest_main
+                nlohmann_json::nlohmann_json)
 
     # The fixture builds a fresh SQLite repo per test by applying the shipped
     # schema SQL with the sqlite3 CLI. Resolve it at configure time.
@@ -221,7 +238,10 @@ if(SZ_CPP_SDK_BUILD_TESTS)
         SZ_TEST_SCHEMA_SQL="${SZ_SCHEMA_SQL}"
         SZ_TEST_RESOURCE_PATH="${SZ_RESOURCE_PATH}"
         SZ_TEST_SUPPORT_PATH="${SZ_SUPPORT_PATH}"
-        SZ_TEST_CONFIG_PATH="${SZ_CONFIG_PATH}")
+        SZ_TEST_CONFIG_PATH="${SZ_CONFIG_PATH}"
+        # SzFlagsTest validates the generated flags runtime API against the same
+        # szflags.json the header was generated from (no hardcoded flag tables).
+        SZ_TEST_FLAGS_JSON="${SZ_FLAGS_JSON}")
 
     include(GoogleTest)
     # ASAN_OPTIONS=alloc_dealloc_mismatch=0: the closed-source libSz.so internally

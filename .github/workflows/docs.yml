@@ -1,0 +1,62 @@
+# Builds the Doxygen API reference and deploys it to GitHub Pages.
+#
+# Pages must be enabled for the repository with "GitHub Actions" as the source
+# (Settings -> Pages -> Build and deployment -> Source: GitHub Actions).
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    # Only rebuild docs when the API surface, docs config, or this workflow change.
+    paths:
+      - 'include/**'
+      - 'docs/**'
+      - 'README.md'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+# Allow the deploy step to publish to Pages; one concurrent deploy at a time.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules for the doxygen-awesome-css theme)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          submodules: true
+
+      - name: Install Doxygen + Graphviz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Enable diagrams (Graphviz is available on the runner)
+        run: sed -i 's/^HAVE_DOT .*/HAVE_DOT = YES/' docs/Doxyfile
+
+      - name: Generate API reference
+        run: doxygen docs/Doxyfile
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/doxygen/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -70,3 +70,6 @@ Testing/
 
 # local Claude Code settings (machine-specific)
 .claude/settings.local.json
+
+# generated Doxygen API reference (published to GitHub Pages by CI)
+docs/doxygen/

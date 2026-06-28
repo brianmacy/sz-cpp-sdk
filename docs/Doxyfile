@@ -1,0 +1,49 @@
+# Doxyfile for the Senzing C++ SDK API reference.
+#
+# Run from the repository root:  doxygen docs/Doxyfile
+# Output:                        docs/doxygen/html  (published to GitHub Pages)
+#
+# Styled with the doxygen-awesome-css theme, vendored as the pinned submodule
+# third_party/doxygen-awesome-css (run `git submodule update --init` first).
+# Only non-default settings are listed; Doxygen supplies defaults for the rest.
+
+PROJECT_NAME           = "Senzing C++ SDK"
+PROJECT_BRIEF          = "C++ SDK for Senzing v4, patterned after the official C# SDK"
+OUTPUT_DIRECTORY       = docs/doxygen
+CREATE_SUBDIRS         = NO
+
+# ---- Inputs: the public API headers plus a Markdown landing page ----
+INPUT                  = include docs/mainpage.md README.md
+FILE_PATTERNS          = *.hpp *.h *.md
+RECURSIVE              = YES
+USE_MDFILE_AS_MAINPAGE = docs/mainpage.md
+STRIP_FROM_PATH        = include
+
+# ---- Extraction ----
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MARKDOWN_SUPPORT       = YES
+OPTIMIZE_OUTPUT_FOR_C  = NO
+BUILTIN_STL_SUPPORT    = YES
+WARN_IF_UNDOCUMENTED   = NO
+
+# ---- Output: HTML only ----
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+QUIET                  = YES
+WARNINGS               = YES
+
+# ---- doxygen-awesome-css theme integration ----
+# (recommended settings from the theme's documentation)
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+HTML_COLORSTYLE        = LIGHT
+HTML_EXTRA_STYLESHEET  = third_party/doxygen-awesome-css/doxygen-awesome.css \
+                         third_party/doxygen-awesome-css/doxygen-awesome-sidebar-only.css
+HTML_COPY_CLIPBOARD    = NO
+
+# ---- Diagrams: enabled only when Graphviz (dot) is available (set in CI) ----
+HAVE_DOT               = NO

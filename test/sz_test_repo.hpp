@@ -1,14 +1,10 @@
-// sz_test_repo.hpp -- reusable real-engine test repository fixture (header-only).
+// sz_test_repo.hpp -- legacy per-test real-engine repository fixture.
 //
-// NO MOCKS. Creates a fresh, schema-only SQLite database at a unique writable
-// temp path by applying the schema SQL shipped with the Senzing install (via the
-// sqlite3 CLI), builds the matching SENZING_ENGINE_CONFIGURATION_JSON settings
-// string, and bootstraps a default configuration THROUGH THIS SDK so a later
-// engine init has a default config to load:
-//   CreateConfig() -> RegisterConfig(cfg.Export(), "...") -> SetDefaultConfigID(id)
-// The temp database is removed on teardown. Building the repo from the shipped
-// schema SQL (senzingsdk-setup) rather than copying a prebuilt template keeps
-// the suite free of the optional senzingsdk-poc package.
+// NO MOCKS. Provisions a fresh repository for EACH test (SetUp/TearDown). The
+// actual provisioning now lives in repo_manager.hpp (shared with the C#-faithful
+// per-suite base in abstract_test.hpp) so the logic is defined once. This fixture
+// is retained for the suites written before the AbstractTest port; new suites
+// should derive from senzing::sdk::test::AbstractTest instead.
 //
 // Senzing install paths come from compile definitions (CMake cache vars), so the
 // suite runs against any install location, not just the canonical /opt.
@@ -18,67 +14,25 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
-#include <cstdlib>
-#include <filesystem>
 #include <memory>
-#include <random>
-#include <sstream>
 #include <string>
 
+#include "repo_manager.hpp"
 #include "senzing/sdk/core/SzCoreEnvironment.hpp"
 
-// Provided by CMake (target_compile_definitions); fall back to canonical paths.
-#ifndef SZ_TEST_SQLITE3
-#define SZ_TEST_SQLITE3 "sqlite3"
-#endif
-#ifndef SZ_TEST_SCHEMA_SQL
-#define SZ_TEST_SCHEMA_SQL \
-    "/opt/senzing/er/resources/schema/szcore-schema-sqlite-create.sql"
-#endif
-#ifndef SZ_TEST_RESOURCE_PATH
-#define SZ_TEST_RESOURCE_PATH "/opt/senzing/er/resources"
-#endif
-#ifndef SZ_TEST_SUPPORT_PATH
-#define SZ_TEST_SUPPORT_PATH "/opt/senzing/data"
-#endif
-#ifndef SZ_TEST_CONFIG_PATH
-#define SZ_TEST_CONFIG_PATH "/etc/opt/senzing"
-#endif
-
 namespace senzing::sdk::test {
-
-namespace fs = std::filesystem;
 
 /// GoogleTest fixture that provisions a fresh, writable Senzing repository for
 /// each test against the real native engine. Derive test suites from this.
 class SzTestRepo : public ::testing::Test {
 protected:
     void SetUp() override {
-        const fs::path schemaSql{SZ_TEST_SCHEMA_SQL};
-        ASSERT_TRUE(fs::exists(schemaSql))
-            << "Schema SQL missing: " << schemaSql
-            << " (install senzingsdk-setup)";
-
-        std::random_device rd;
-        std::ostringstream name;
-        name << "sz_cpp_sdk_test_" << rd() << "_" << rd() << ".db";
-        dbPath_ = fs::temp_directory_path() / name.str();
-
-        // Apply the schema to a brand-new SQLite file via the sqlite3 CLI.
-        std::ostringstream cmd;
-        cmd << '"' << SZ_TEST_SQLITE3 << "\" \"" << dbPath_.string()
-            << "\" < \"" << schemaSql.string() << '"';
-        const int rc = std::system(cmd.str().c_str());
-        ASSERT_EQ(rc, 0) << "Failed to create SQLite schema (rc=" << rc
-                         << "): " << cmd.str();
-
-        std::ostringstream settings;
-        settings << R"({"PIPELINE":{"CONFIGPATH":")" << SZ_TEST_CONFIG_PATH
-                 << R"(","RESOURCEPATH":")" << SZ_TEST_RESOURCE_PATH
-                 << R"(","SUPPORTPATH":")" << SZ_TEST_SUPPORT_PATH
-                 << R"("},"SQL":{"CONNECTION":"sqlite3://na:na@)"
-                 << dbPath_.string() << R"("}})";
-        settings_ = settings.str();
+        try {
+            dbPath_ = CreateSchemaDatabase();
+        } catch (const std::exception& e) {
+            FAIL() << e.what();
+        }
+        settings_ = BuildSettings(dbPath_);
     }
 
     void TearDown() override {
@@ -86,7 +40,7 @@ protected:
         fs::remove(dbPath_, ec);  // best-effort cleanup
     }
 
-    /// Builds a fresh environment over this fixture's freshly-copied repository.
+    /// Builds a fresh environment over this fixture's freshly-created repository.
     std::unique_ptr<senzing::sdk::core::SzCoreEnvironment> NewEnvironment(
         const std::string& instanceName = "sz-cpp-sdk-test") {
         return senzing::sdk::core::SzCoreEnvironment::NewBuilder()
@@ -96,21 +50,10 @@ protected:
             .Build();
     }
 
-    /// Bootstraps a default configuration in this repository using THIS SDK,
-    /// mirroring the validated CreateConfig -> RegisterConfig -> SetDefaultConfigID
-    /// flow. Returns the registered config ID. Uses its own short-lived
-    /// environment so callers can subsequently build a fresh environment that
-    /// observes the default config.
-    int64_t BootstrapDefaultConfig(
-        const std::string& comment = "Initial Config") {
-        auto env = NewEnvironment("sz-cpp-sdk-bootstrap");
-        auto& configMgr = env->GetConfigManager();
-        std::unique_ptr<senzing::sdk::SzConfig> config = configMgr.CreateConfig();
-        const int64_t configID =
-            configMgr.RegisterConfig(config->Export(), comment);
-        configMgr.SetDefaultConfigID(configID);
-        env->Destroy();
-        return configID;
+    /// Bootstraps a default configuration in this repository using THIS SDK.
+    /// Returns the registered config ID.
+    int64_t BootstrapDefaultConfig(const std::string& comment = "Initial Config") {
+        return senzing::sdk::test::BootstrapDefaultConfig(settings_, {}, comment);
     }
 
     fs::path dbPath_;

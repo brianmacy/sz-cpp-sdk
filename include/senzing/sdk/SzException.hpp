@@ -118,6 +118,14 @@ public:
         : std::logic_error("The Senzing environment has been destroyed.") {}
     explicit SzEnvironmentDestroyedException(const std::string& message)
         : std::logic_error(message) {}
+    // Mirrors the C# (string message, Exception cause) and (Exception cause)
+    // constructors. std::logic_error carries no separate cause, so -- exactly as
+    // SzException does -- the cause's text is folded into the message.
+    SzEnvironmentDestroyedException(const std::string& message,
+                                    const std::exception& cause)
+        : std::logic_error(message + ": " + cause.what()) {}
+    explicit SzEnvironmentDestroyedException(const std::exception& cause)
+        : std::logic_error(cause.what()) {}
 };
 
 }  // namespace senzing::sdk
