@@ -15,6 +15,21 @@ environment on exit (RAII `EnvGuard`, the C++ equivalent of a `finally` block).
 | `sz_get_why_how` | Resolve a record to its entity, then `GetEntity`, `WhyRecordInEntity`, `HowEntity`. |
 | `sz_export_report` | Stream a JSON entity report (`ExportJsonEntityReport` / `FetchNext` / `CloseExportReport`). |
 
+### Per-subsystem demos (mirror the C# `Senzing.Sdk.Demo` project)
+
+These exercise every method of one subsystem, mirroring the C# Demo files.
+
+| Program | What it shows |
+|---|---|
+| `sz_product_demo` | Every `SzProduct` method (`GetVersion`, `GetLicense`). |
+| `sz_config_demo` | Every `SzConfig` method (`CreateConfig` template/from-definition, `Export`, `RegisterDataSource`, `UnregisterDataSource`, `GetDataSourceRegistry`). |
+| `sz_configmanager_demo` | Every `SzConfigManager` method (`RegisterConfig`, `GetConfigRegistry`, `Get/SetDefaultConfigID`, `CreateConfig(configID)`, `SetDefaultConfig`, `ReplaceDefaultConfigID`). |
+| `sz_diagnostic_demo` | Every `SzDiagnostic` method (`GetRepositoryInfo`, `CheckRepositoryPerformance`, `GetFeature`, `PurgeRepository`). |
+| `sz_engine_demo` | The full `SzEngine` surface end to end (prime, add/get/search/why/how/path/network/interesting/reevaluate/export/redo/delete). |
+
+The `*_demo` programs that need a data source set one up themselves (via
+`SzConfigManager` + `Reinitialize`), so they run against a bare schema-only repo.
+
 The examples are built by default (CMake option `SZ_BUILD_EXAMPLES=ON`) and land
 in the build tree's `bin/`-equivalent next to the other targets. They link the
 SDK (and transitively `libSz`); they compile without a running repository, but

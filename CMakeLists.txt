@@ -127,7 +127,13 @@ if(SZ_BUILD_EXAMPLES)
         sz_register_and_load
         sz_search_records
         sz_get_why_how
-        sz_export_report)
+        sz_export_report
+        # Per-subsystem demos mirroring the C# Senzing.Sdk.Demo project.
+        sz_product_demo
+        sz_config_demo
+        sz_configmanager_demo
+        sz_diagnostic_demo
+        sz_engine_demo)
     foreach(example ${SZ_EXAMPLE_PROGRAMS})
         add_executable(${example} "examples/${example}.cpp")
         target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic)

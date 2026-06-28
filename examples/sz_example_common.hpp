@@ -9,11 +9,15 @@
 #ifndef SENZING_SDK_EXAMPLES_SZ_EXAMPLE_COMMON_HPP
 #define SENZING_SDK_EXAMPLES_SZ_EXAMPLE_COMMON_HPP
 
+#include <cstdint>
 #include <cstdlib>
+#include <initializer_list>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
+#include "senzing/sdk/SzConfig.hpp"
+#include "senzing/sdk/SzConfigManager.hpp"
 #include "senzing/sdk/core/SzCoreEnvironment.hpp"
 
 namespace senzing::sdk::examples {
@@ -66,6 +70,24 @@ inline EnvGuard BuildEnvironment(const std::string& instanceName) {
                    .VerboseLogging(false)
                    .Build();
     return EnvGuard(std::move(env));
+}
+
+/// Ensures the repository has a default configuration that includes the given
+/// data sources, then reinitializes the environment to it and returns its config
+/// ID. Demonstrative helper so the engine/diagnostic examples are self-contained
+/// (the C# demos assume a pre-configured repository).
+inline int64_t SetupDataSources(core::SzCoreEnvironment& env,
+                                std::initializer_list<const char*> dataSources) {
+    SzConfigManager& configMgr = env.GetConfigManager();
+    std::unique_ptr<SzConfig> config = configMgr.CreateConfig();
+    for (const char* dataSource : dataSources) {
+        config->RegisterDataSource(dataSource);
+    }
+    const int64_t configID =
+        configMgr.RegisterConfig(config->Export(), "example config");
+    configMgr.SetDefaultConfigID(configID);
+    env.Reinitialize(configID);
+    return configID;
 }
 
 }  // namespace senzing::sdk::examples
