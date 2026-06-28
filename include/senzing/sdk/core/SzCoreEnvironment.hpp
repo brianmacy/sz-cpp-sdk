@@ -5,9 +5,8 @@
 // throws SzEnvironmentDestroyedException after Destroy()) and return a non-owning
 // reference to the env-owned subsystem.
 //
-// Phase 1/2 scope: GetProduct, GetConfigManager, GetDiagnostic, Destroy,
-// IsDestroyed, GetActiveConfigID, Reinitialize are implemented. GetEngine
-// currently throws std::logic_error("not implemented") -- filled in a later phase.
+// All accessors are implemented: GetProduct, GetEngine, GetConfigManager,
+// GetDiagnostic, plus Destroy, IsDestroyed, GetActiveConfigID, and Reinitialize.
 #ifndef SENZING_SDK_CORE_SZCOREENVIRONMENT_HPP
 #define SENZING_SDK_CORE_SZCOREENVIRONMENT_HPP
 
