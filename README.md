@@ -33,8 +33,9 @@ no flag or error data is hardcoded.
 
 ## Prerequisites
 
-- **Senzing 4.4.x** installed at `/opt/senzing` (the engine, native headers, and
-  data files). The build expects:
+- **Senzing 4.3.x or 4.4.x** installed at `/opt/senzing` (the engine, native
+  headers, and data files). The public API is identical across these versions and
+  the SDK is verified to build and pass its tests against both. The build expects:
   - native C headers at `/opt/senzing/er/sdk/c`
   - the native library at `/opt/senzing/er/lib/libSz.so`
   - `szflags.json` / `szerrors.json` at `/opt/senzing/er/sdk/`

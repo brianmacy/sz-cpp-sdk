@@ -22,6 +22,20 @@ set(SZ_FLAGS_JSON "${SZ_NATIVE_ROOT}/sdk/szflags.json"
 set(SZ_ERRORS_JSON "${SZ_NATIVE_ROOT}/sdk/szerrors.json"
     CACHE FILEPATH "Senzing errors JSON")
 
+# Runtime paths used by the test fixture to build a local SQLite repository.
+# Overridable so the suite runs against any install location (canonical /opt by
+# default). The schema SQL ships in the senzingsdk-setup package; the fixture
+# applies it with the sqlite3 CLI rather than copying a prebuilt template (which
+# lives only in the optional senzingsdk-poc package).
+set(SZ_RESOURCE_PATH "${SZ_NATIVE_ROOT}/resources"
+    CACHE PATH "Senzing RESOURCEPATH (rules/templates)")
+set(SZ_SUPPORT_PATH "/opt/senzing/data"
+    CACHE PATH "Senzing SUPPORTPATH (data models)")
+set(SZ_CONFIG_PATH "/etc/opt/senzing"
+    CACHE PATH "Senzing CONFIGPATH (engine config files)")
+set(SZ_SCHEMA_SQL "${SZ_RESOURCE_PATH}/schema/szcore-schema-sqlite-create.sql"
+    CACHE FILEPATH "SQLite schema-create SQL shipped with senzingsdk-setup")
+
 if(NOT EXISTS "${SZ_NATIVE_INCLUDE}")
     message(FATAL_ERROR "Senzing native headers not found at ${SZ_NATIVE_INCLUDE}")
 endif()
@@ -198,6 +212,16 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     target_include_directories(sz_cpp_sdk_tests PRIVATE "${CMAKE_SOURCE_DIR}/test")
     target_link_libraries(sz_cpp_sdk_tests
         PRIVATE sz_cpp_sdk GTest::gtest GTest::gtest_main)
+
+    # The fixture builds a fresh SQLite repo per test by applying the shipped
+    # schema SQL with the sqlite3 CLI. Resolve it at configure time.
+    find_program(SZ_SQLITE3_EXECUTABLE NAMES sqlite3 REQUIRED)
+    target_compile_definitions(sz_cpp_sdk_tests PRIVATE
+        SZ_TEST_SQLITE3="${SZ_SQLITE3_EXECUTABLE}"
+        SZ_TEST_SCHEMA_SQL="${SZ_SCHEMA_SQL}"
+        SZ_TEST_RESOURCE_PATH="${SZ_RESOURCE_PATH}"
+        SZ_TEST_SUPPORT_PATH="${SZ_SUPPORT_PATH}"
+        SZ_TEST_CONFIG_PATH="${SZ_CONFIG_PATH}")
 
     include(GoogleTest)
     # ASAN_OPTIONS=alloc_dealloc_mismatch=0: the closed-source libSz.so internally

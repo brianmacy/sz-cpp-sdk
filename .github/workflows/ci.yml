@@ -1,39 +1,33 @@
 # CI for sz-cpp-sdk: build the C++ SDK and run the real-engine GoogleTest suite.
 #
 # The tests run against the REAL native Senzing engine (no mocks), so the job
-# must provision a complete Senzing 4.4.x runtime at the exact /opt/senzing/...
-# paths the SDK and tests hardcode.
+# provisions a Senzing runtime at the canonical /opt/senzing paths.
 #
-# Install method & sources (verified, not from memory):
-#   * Method: official apt repository on ubuntu-latest (NOT the container image).
-#     Rationale: the `senzing/senzingsdk-runtime` image does NOT ship the
-#     `G2C.db` template the tests read (it carries only `G2C.db.template`); that
-#     file is owned by the `senzingsdk-poc` package. Installing the right
-#     packages via apt onto ubuntu-latest puts every file at the canonical
-#     /opt/senzing path with no container/path mismatch.
+# Version: the production apt repo's current 4.x line (4.3.2). The SDK's public
+# surface mirrors the C# 4.3.0 API; the public API is byte-for-byte identical
+# between 4.3.2 and 4.4.0 (verified by diffing the installed 4.4.0 Senzing.Sdk
+# package against the 4.3.0 source -- only two additive flag-metadata types,
+# SzFlagInfo / SzFlagUsageGroupInfo, differ; no interface/method/exception
+# changes). The SDK was verified to build AND pass all tests against a real
+# 4.3.2 install, so CI tracks the stable production line rather than the
+# staging-only 4.4.x. Bump SENZING_VERSION when a newer build promotes to
+# production (flags/error tables regenerate from the installed JSON at configure
+# time, so no source change is needed for a version bump).
+#
+# Install method & sources (verified via the Senzing MCP sdk_guide
+# topic=install, platform=linux_apt; package ownership confirmed via dpkg -S on a
+# real install):
 #   * Repo bootstrap: the `senzingrepo` package (senzingrepo_2.0.1-1_all.deb from
-#     senzing-production-apt.s3.amazonaws.com) — the OS-detecting apt configurer
-#     documented by the Senzing MCP `sdk_guide` topic=install, platform=linux_apt.
-#     Do NOT hand-add the legacy dists/stable URL (libssl1.1-only, per MCP).
-#
-# Package selection (confirmed via `dpkg -S` on the validated local 4.4.0 install
-# and the apt Packages indices):
-#   * senzingsdk-runtime  -> libSz.so, native C headers (/opt/senzing/er/sdk/c),
-#                            szflags.json + szerrors.json (codegen inputs at
-#                            CMake configure time), /etc/opt/senzing config, and
-#                            /opt/senzing/data support files.
-#   * senzingsdk-poc      -> /opt/senzing/er/resources/templates/G2C.db, the
-#                            schema-only template each test copies (kTemplateDb in
-#                            test/sz_test_repo.hpp). `senzingsdk-setup` does NOT
-#                            provide it; `senzingsdk-poc` does.
-#
-# Version pinning (4.4.x line, per task requirement):
-#   The 4.4.x line is currently published ONLY in the senzing-staging-apt repo
-#   (production tops out at 4.3.2; the locally validated build is 4.4.0). The
-#   `senzingrepo` package installs /etc/apt/sources.list.d/senzing-staging.list
-#   but leaves it commented; the step below un-comments it before installing the
-#   pinned 4.4.0 packages. Bump SENZING_VERSION as 4.4.x advances / promotes to
-#   production (and drop the staging-enable step once it lands there).
+#     senzing-production-apt.s3.amazonaws.com) -- the OS-detecting apt configurer.
+#   * senzingsdk-runtime -> libSz.so, native C headers (/opt/senzing/er/sdk/c),
+#     szflags.json + szerrors.json (codegen inputs), /etc/opt/senzing config,
+#     /opt/senzing/data support files, and the rules/resources tree.
+#   * senzingsdk-setup    -> the SQLite schema SQL
+#     (/opt/senzing/er/resources/schema/szcore-schema-sqlite-create.sql) that the
+#     test fixture applies to build a fresh repo per test. (The prebuilt G2C.db
+#     template lives only in the optional senzingsdk-poc package; the fixture
+#     deliberately creates the schema instead so CI needs only runtime + setup.)
+#   * sqlite3 CLI -> used by the fixture to apply the schema.
 #
 # EULA: installing Senzing requires accepting the Senzing EULA
 # (https://senzing.com/senzing-eula). CI asserts acceptance via the documented
@@ -47,12 +41,11 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & real-engine tests (Senzing 4.4.x)
+    name: Build & real-engine tests (Senzing 4.3.x)
     runs-on: ubuntu-latest
 
     env:
-      # Senzing 4.4.x is published in the staging apt repo today (see header).
-      SENZING_VERSION: "4.4.0"
+      SENZING_VERSION: "4.3.2"
       SENZING_ACCEPT_EULA: "I_ACCEPT_THE_SENZING_EULA"
       SENZING_REPO_DEB: "senzingrepo_2.0.1-1_all.deb"
       SENZING_REPO_URL: "https://senzing-production-apt.s3.amazonaws.com"
@@ -67,21 +60,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build g++ python3 git ca-certificates wget
+            cmake ninja-build g++ python3 git ca-certificates wget sqlite3
 
       - name: Configure Senzing apt repository
         run: |
           wget -q "${SENZING_REPO_URL}/${SENZING_REPO_DEB}"
           sudo apt-get install -y "./${SENZING_REPO_DEB}"
-          # 4.4.x lives in the staging dist, which senzingrepo ships commented out.
-          sudo sed -i 's/^#deb /deb /' /etc/apt/sources.list.d/senzing-staging.list
           sudo apt-get update
 
-      - name: Install Senzing runtime (libSz, headers, config, data) + poc (G2C.db template)
+      - name: Install Senzing runtime + setup (libSz, headers, config, schema SQL)
         run: |
           sudo apt-get install -y --no-install-recommends \
             "senzingsdk-runtime=${SENZING_VERSION}-*" \
-            "senzingsdk-poc=${SENZING_VERSION}-*"
+            "senzingsdk-setup=${SENZING_VERSION}-*"
           # Fail loudly now if any path the build/tests depend on is missing.
           test -f /opt/senzing/er/lib/libSz.so
           test -d /opt/senzing/er/sdk/c
@@ -89,7 +80,7 @@ jobs:
           test -f /opt/senzing/er/sdk/szerrors.json
           test -d /etc/opt/senzing
           test -d /opt/senzing/data
-          test -f /opt/senzing/er/resources/templates/G2C.db
+          test -f /opt/senzing/er/resources/schema/szcore-schema-sqlite-create.sql
 
       - name: Configure (CMake + Ninja, C++20, Debug)
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
