@@ -4,9 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+Versions follow `4.3.0-N`: `4.3.0` tracks the mirrored C# SDK API
+(`senzing-garage/sz-sdk-csharp@4.3.0`) and `-N` is this C++ SDK's release
+revision, incremented for changes made against the 4.3 line (mirrors Senzing's
+own `version-build` packaging scheme).
+
 ## [Unreleased]
 
-## [4.3.0] - 2026-06-28
+## [4.3.0-1] - 2026-06-29
 
 First tagged release. C++ SDK for Senzing v4, ported 1:1 from the official C#
 SDK (`senzing-garage/sz-sdk-csharp@4.3.0`).
