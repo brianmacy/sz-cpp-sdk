@@ -3,7 +3,7 @@
 # The tests run against the REAL native Senzing engine (no mocks), so the job
 # provisions a Senzing runtime at the canonical /opt/senzing paths.
 #
-# Version: the production apt repo's current 4.x line (4.3.2). The SDK's public
+# Version: the production apt repo's current 4.x line (4.3.3). The SDK's public
 # surface mirrors the C# 4.3.0 API; the public API is byte-for-byte identical
 # between 4.3.2 and 4.4.0 (verified by diffing the installed 4.4.0 Senzing.Sdk
 # package against the 4.3.0 source -- only two additive flag-metadata types,
@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      SENZING_VERSION: "4.3.2"
+      SENZING_VERSION: "4.3.3"
       SENZING_ACCEPT_EULA: "I_ACCEPT_THE_SENZING_EULA"
       SENZING_REPO_DEB: "senzingrepo_2.0.1-1_all.deb"
       SENZING_REPO_URL: "https://senzing-production-apt.s3.amazonaws.com"
