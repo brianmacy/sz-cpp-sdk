@@ -5,11 +5,32 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# ---- Embedding detection ----
+# When this project is consumed by a larger build via add_subdirectory() or
+# FetchContent (the canonical way to use this source library), tests, examples,
+# and ASan default OFF so they do not fight the parent build's own GoogleTest,
+# targets, and sanitizer/compile-flag policy. A standalone (top-level) build
+# keeps the full dev defaults (tests + examples + ASan ON). All three stay
+# overridable with -D. PROJECT_IS_TOP_LEVEL is CMake >= 3.21; fall back to the
+# source-dir comparison for 3.20.
+if(DEFINED PROJECT_IS_TOP_LEVEL)
+    set(SZ_CPP_SDK_TOP_LEVEL ${PROJECT_IS_TOP_LEVEL})
+elseif(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(SZ_CPP_SDK_TOP_LEVEL ON)
+else()
+    set(SZ_CPP_SDK_TOP_LEVEL OFF)
+endif()
+
 # ---- Options ----
-option(SZ_CPP_SDK_BUILD_TESTS "Build the sz_cpp_sdk test suite" ON)
-option(SZ_BUILD_EXAMPLES "Build the sz_cpp_sdk example programs" ON)
+option(SZ_CPP_SDK_BUILD_TESTS
+       "Build the sz_cpp_sdk test suite (ON standalone, OFF when embedded)"
+       ${SZ_CPP_SDK_TOP_LEVEL})
+option(SZ_BUILD_EXAMPLES
+       "Build the sz_cpp_sdk example programs (ON standalone, OFF when embedded)"
+       ${SZ_CPP_SDK_TOP_LEVEL})
 option(SZ_CPP_SDK_ENABLE_ASAN
-       "Build with AddressSanitizer (default ON for this dev build)" ON)
+       "Build with AddressSanitizer (ON standalone, OFF when embedded)"
+       ${SZ_CPP_SDK_TOP_LEVEL})
 
 # ---- Senzing native install locations (overridable) ----
 set(SZ_NATIVE_ROOT "/opt/senzing/er" CACHE PATH "Senzing er install root")
@@ -46,16 +67,16 @@ endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # ---- Code generation: SzFlags.hpp from szflags.json ----
-set(SZ_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
+set(SZ_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(SZ_FLAGS_HEADER "${SZ_GENERATED_DIR}/include/senzing/sdk/SzFlags.hpp")
 file(MAKE_DIRECTORY "${SZ_GENERATED_DIR}/include/senzing/sdk")
 
 add_custom_command(
     OUTPUT "${SZ_FLAGS_HEADER}"
     COMMAND ${Python3_EXECUTABLE}
-            "${CMAKE_SOURCE_DIR}/tools/gen_flags.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_flags.py"
             "${SZ_FLAGS_JSON}" "${SZ_FLAGS_HEADER}"
-    DEPENDS "${CMAKE_SOURCE_DIR}/tools/gen_flags.py" "${SZ_FLAGS_JSON}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_flags.py" "${SZ_FLAGS_JSON}"
     COMMENT "Generating SzFlags.hpp from ${SZ_FLAGS_JSON}"
     VERBATIM)
 
@@ -66,9 +87,9 @@ file(MAKE_DIRECTORY "${SZ_GENERATED_DIR}/src/core")
 add_custom_command(
     OUTPUT "${SZ_ERROR_MAP_INC}"
     COMMAND ${Python3_EXECUTABLE}
-            "${CMAKE_SOURCE_DIR}/tools/gen_errors.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_errors.py"
             "${SZ_ERRORS_JSON}" "${SZ_ERROR_MAP_INC}"
-    DEPENDS "${CMAKE_SOURCE_DIR}/tools/gen_errors.py" "${SZ_ERRORS_JSON}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_errors.py" "${SZ_ERRORS_JSON}"
     COMMENT "Generating sz_error_map.inc from ${SZ_ERRORS_JSON}"
     VERBATIM)
 
@@ -99,13 +120,13 @@ target_include_directories(sz_cpp_sdk
         # requirement in both cases (public headers transitively pull in
         # SzFlags.hpp only; the native headers are needed by the impl, but
         # exposing them keeps downstream builds that reach into core/ working).
-        "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
         "$<BUILD_INTERFACE:${SZ_GENERATED_DIR}/include>"   # generated SzFlags.hpp
         "$<INSTALL_INTERFACE:include>"
         "$<BUILD_INTERFACE:${SZ_NATIVE_INCLUDE}>"
         "$<INSTALL_INTERFACE:${SZ_NATIVE_INCLUDE}>"
     PRIVATE
-        "${CMAKE_SOURCE_DIR}/src/core"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
         "${SZ_GENERATED_DIR}/src/core")  # generated sz_error_map.inc
 
 target_link_libraries(sz_cpp_sdk PUBLIC "${SZ_NATIVE_LIB}")
@@ -139,7 +160,7 @@ if(SZ_BUILD_EXAMPLES)
         target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic)
         # examples/ is on the include path for the shared sz_example_common.hpp.
         target_include_directories(${example}
-            PRIVATE "${CMAKE_SOURCE_DIR}/examples")
+            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/examples")
         target_link_libraries(${example} PRIVATE sz_cpp_sdk)
     endforeach()
 endif()
@@ -150,7 +171,7 @@ include(CMakePackageConfigHelpers)
 
 # Public headers: the hand-written tree under include/ plus the generated
 # SzFlags.hpp from the build's generated include tree.
-install(DIRECTORY "${CMAKE_SOURCE_DIR}/include/senzing"
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/senzing"
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(FILES "${SZ_FLAGS_HEADER}"
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/senzing/sdk")
@@ -170,18 +191,18 @@ install(EXPORT SzCppSdkTargets
         DESTINATION "${SZ_INSTALL_CMAKEDIR}")
 
 configure_package_config_file(
-    "${CMAKE_SOURCE_DIR}/cmake/SzCppSdkConfig.cmake.in"
-    "${CMAKE_BINARY_DIR}/SzCppSdkConfig.cmake"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SzCppSdkConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/SzCppSdkConfig.cmake"
     INSTALL_DESTINATION "${SZ_INSTALL_CMAKEDIR}")
 
 write_basic_package_version_file(
-    "${CMAKE_BINARY_DIR}/SzCppSdkConfigVersion.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/SzCppSdkConfigVersion.cmake"
     VERSION "${PROJECT_VERSION}"
     COMPATIBILITY SameMajorVersion)
 
 install(FILES
-        "${CMAKE_BINARY_DIR}/SzCppSdkConfig.cmake"
-        "${CMAKE_BINARY_DIR}/SzCppSdkConfigVersion.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/SzCppSdkConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/SzCppSdkConfigVersion.cmake"
         DESTINATION "${SZ_INSTALL_CMAKEDIR}")
 
 # ---- Tests ----
@@ -203,7 +224,7 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     # it for ValidateJsonDataMap-style exact key-set validation (mirroring the C#
     # suite's System.Text.Json usage). Header-only target nlohmann_json::nlohmann_json.
     set(JSON_BuildTests OFF CACHE INTERNAL "")  # do not build nlohmann's own test suite
-    if(NOT EXISTS "${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/CMakeLists.txt")
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann_json/CMakeLists.txt")
         message(FATAL_ERROR
             "third_party/nlohmann_json is empty -- run: git submodule update --init")
     endif()
@@ -238,7 +259,7 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     target_compile_options(sz_cpp_sdk_tests PRIVATE -Wall -Wextra -Wpedantic)
     # test/ is on the include path so suites can pull in the shared header-only
     # repository fixture (test/sz_test_repo.hpp).
-    target_include_directories(sz_cpp_sdk_tests PRIVATE "${CMAKE_SOURCE_DIR}/test")
+    target_include_directories(sz_cpp_sdk_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test")
     target_link_libraries(sz_cpp_sdk_tests
         PRIVATE sz_cpp_sdk GTest::gtest GTest::gtest_main
                 nlohmann_json::nlohmann_json)

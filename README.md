@@ -61,9 +61,14 @@ fresh local SQLite repository per test from the shipped schema template.
 
 | Option | Default | Effect |
 |---|---|---|
-| `SZ_CPP_SDK_BUILD_TESTS` | `ON` | Build the GoogleTest suite (fetched via `FetchContent`). |
-| `SZ_BUILD_EXAMPLES` | `ON` | Build the example programs under `examples/`. |
-| `SZ_CPP_SDK_ENABLE_ASAN` | `ON` | Build with AddressSanitizer (dev default). |
+| `SZ_CPP_SDK_BUILD_TESTS` | top-level | Build the GoogleTest suite (fetched via `FetchContent`). |
+| `SZ_BUILD_EXAMPLES` | top-level | Build the example programs under `examples/`. |
+| `SZ_CPP_SDK_ENABLE_ASAN` | top-level | Build with AddressSanitizer (dev default). |
+
+The three defaults above are **`ON` for a standalone (top-level) build and `OFF`
+when the SDK is embedded** via `add_subdirectory`/`FetchContent`, so an embedding
+parent isn't forced to build the test suite (or fetch a second GoogleTest), the
+examples, or ASan. Override any of them explicitly with `-D…=ON/OFF`.
 
 ## Repository settings
 
@@ -170,6 +175,28 @@ Vendor the source tree (or a submodule) and add it:
 add_subdirectory(third_party/sz-cpp-sdk)
 target_link_libraries(my_app PRIVATE SzCppSdk::sz_cpp_sdk)
 ```
+
+When embedded this way the SDK detects it is not the top-level project, so its
+test suite, examples, and ASan default **off** — it contributes just the
+`SzCppSdk::sz_cpp_sdk` library (and its `SzFlags.hpp`/error-map codegen) to your
+build. Re-enable any of them with `-DSZ_CPP_SDK_BUILD_TESTS=ON`, etc.
+
+**Embedding against an in-tree Senzing engine.** A monorepo that builds its own
+copy of the engine can bind the SDK to those in-tree artifacts instead of an
+installed `/opt/senzing`, by pointing the (cache-overridable) `SZ_NATIVE_*`
+variables at them *before* `add_subdirectory`:
+
+```cmake
+set(SZ_NATIVE_INCLUDE "${MY_ENGINE_DIR}/sdk/c"            CACHE PATH "" FORCE)
+set(SZ_NATIVE_LIB     "$<TARGET_FILE:my_libSz>"           CACHE FILEPATH "" FORCE)
+set(SZ_FLAGS_JSON     "${MY_ENGINE_DIR}/sdk/szflags.json" CACHE FILEPATH "" FORCE)
+set(SZ_ERRORS_JSON    "${MY_ENGINE_DIR}/sdk/szerrors.json" CACHE FILEPATH "" FORCE)
+add_subdirectory(third_party/sz-cpp-sdk)
+```
+
+The flag constants and error map are regenerated from *your* `szflags.json` /
+`szerrors.json`, so the SDK stays in lockstep with the engine you built. Reuse
+the `sz_cpp_sdk` target and its codegen directly rather than re-implementing them.
 
 ### `FetchContent`
 
