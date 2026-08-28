@@ -57,6 +57,18 @@ reference is valid only until `Destroy()` — calling through it afterward throw
 (In C# the natural `SzEngine engine = env.GetEngine();` works because the type is a
 reference type; in C++ it must be `SzEngine& engine = env->GetEngine();`.)
 
+@note **The environment is a per-process singleton, and an `internal://`
+(in-memory) store does not outlive it.** Only one `SzCoreEnvironment` may be
+active at a time — building a second while one is live throws — and `Destroy()`
+fully tears down the environment and its subsystems. For an in-memory
+`internal://` repository this also discards the store, so a "load →
+`Destroy()` → build a fresh environment → still see the data" pattern finds an
+**empty** store. This is by design (and matches the C# SDK). Persistence/reload
+tests must use a **file-backed** repository (e.g. the SQLite `SzTestRepo`
+fixture), whose data lives on disk independently of the environment lifetime.
+`Reinitialize()` re-inits the engine/diagnostic against a config id; it is not a
+full environment rebuild.
+
 See the `examples/` directory for runnable, per-subsystem programs.
 
 ## Exceptions
