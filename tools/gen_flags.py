@@ -207,6 +207,16 @@ public:
         return value_ != 0;
     }}
 
+    /// Explicit conversion to the raw int64 bitmask (mirrors C# `(long)flag`).
+    /// Enables `static_cast<int64_t>(flags)` and `static_cast<uint64_t>(flags)`
+    /// for storing a flags value back into an integer field; `Value()` remains
+    /// the preferred spelling. Explicit (never implicit) so a flags value can
+    /// never silently participate in integer arithmetic or slip into an int64
+    /// method argument.
+    [[nodiscard]] constexpr explicit operator int64_t() const noexcept {{
+        return value_;
+    }}
+
     // ---- Flags runtime API (mirrors C# Senzing.Sdk.SzFlags static methods) ----
 
     /// The aggregate flags belonging to an individual usage group. Throws

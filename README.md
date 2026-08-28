@@ -125,6 +125,41 @@ Run with `LD_LIBRARY_PATH=/opt/senzing/er/lib`. The runnable example programs
 > SzEngine& engine = env->GetEngine();   // reference — NOT `auto engine = ...`
 > ```
 
+## Working with flags
+
+Flags are a strongly-typed `SzFlags` bitmask (mirroring the C# `SzFlag`), **not**
+a raw integer. Every engine method defaults its flags argument to the right
+`Sz<Method>DefaultFlags`, so the common case needs nothing:
+
+```cpp
+engine.GetEntity(dataSource, recordId);            // uses SzGetEntityDefaultFlags
+engine.AddRecord(ds, id, json, SzWithInfo);        // one named flag
+engine.GetEntity(ds, id, SzEntityIncludeRecordData // combine with '|'
+                         | SzEntityIncludeEntityName);
+engine.GetEntity(ds, id, SzNoFlags);               // explicit "no flags" (not 0)
+```
+
+- **"No flags"** is `SzNoFlags` — a raw `0` will not compile.
+- **"All flags"** for a usage group has a named constant: `SzEntityAllFlags`,
+  `SzExportAllFlags`, `SzSearchAllFlags`, etc. (one per group). For a raw
+  all-bits value, `~SzNoFlags` spells it in one token.
+- **Interop with a raw `int64_t`** (e.g. migrating a suite that stores flag
+  values as integers): construct with `SzFlags{rawValue}` going in, and read the
+  raw value back with `.Value()` (or `static_cast<int64_t>(flags)`):
+
+  ```cpp
+  int64_t raw = /* ... */;
+  std::string e = engine.GetEntity(ds, id, SzFlags{raw});   // wrap on the way in
+  int64_t back = engine./*...*/ , someFlags.Value();        // unwrap on the way out
+  ```
+
+Both boundaries are **explicit by design**: `SzFlags` has no implicit conversion
+to or from an integer, so a stray integer can never silently land in a flags
+argument (several engine methods take `int64_t` parameters right next to the
+flags argument), and a flags value can never silently drift into integer
+arithmetic. This deliberate friction is a type-safety guarantee, not an
+oversight.
+
 ## Consuming the SDK
 
 ### `add_subdirectory`
