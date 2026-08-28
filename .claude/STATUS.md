@@ -1,83 +1,58 @@
 # Status
 
-Branch: `main` — pushed to `origin/main` (HEAD `2b9b500`).
+Branch: `main` — all work pushed to `origin/main` (HEAD `f76de0d`). Working tree
+clean. No feature branch, no open PR (commits land directly on the default branch).
 
 ## Where things stand
 
-The C++ Senzing v4 SDK is implemented AND now ported to **1:1 test/example/docs
-parity** with the C# SDK (`sz-sdk-csharp@4.3.0`).
+The C++ Senzing v4 SDK is implemented and at 1:1 test/example/docs parity with the
+C# SDK (`sz-sdk-csharp@4.3.0`).
 
-- Build: clean, 0 warnings (`-Wall -Wextra -Wpedantic` + ASan).
-- Tests: **217/217 pass** against the real engine (no mocks), up from 29.
-- Every C# test class is ported, or documented as a not-portable C#-language-ism
-  in `test/PARITY_NOTES.md` (attribute reflection, internal `GetNativeApi`,
-  `SzFlagInfo` internals, `Execute` machinery, cross-process `SzConfigRetryable`).
+- Build: clean (`-Wall -Wextra -Wpedantic` + ASan), 0 warnings.
+- Tests: **207/207 pass** against the real engine (no mocks), verified this session.
+- CI + Docs/Pages: green on GitHub Actions.
 
-## What was delivered (this parity effort)
+## This session — resolved 5 GitHub issues (`brianmacy/sz-cpp-sdk`)
 
-- **Docs + GitHub Pages** (`.github/workflows/docs.yml`, `docs/Doxyfile`,
-  `docs/mainpage.md`, `doxygen-awesome-css` submodule) — Doxygen API reference
-  deployed to Pages on push.
-- **Test harness** mirroring C# `AbstractTest`: `test/abstract_test.hpp` (CRTP
-  per-suite repo, `ValidateJsonDataMap`, combinatorics), `test/repo_manager.hpp`,
-  `test/sz_record.hpp` (record builder), `test/text_utilities.hpp`. nlohmann/json
-  vendored as a pinned submodule (test-only).
-- **Ported suites**: Exception, EnvironmentDestroyed, Flags, Config, Product,
-  Diagnostic, Environment, Engine (Basics/Read/Write/Why/How/Graph), ConfigManager.
-- **Examples**: 5 per-subsystem demos mirroring C# `Senzing.Sdk.Demo`
-  (product/config/configmanager/diagnostic/engine); `sz_engine_demo` verified
-  end-to-end against the real engine.
-- **SDK improvements surfaced by the port** (all C#-contract-aligned): the flags
-  runtime API (`SzFlagUsageGroup` + `GetFlags`/`GetFlagsByName`/`GetNamesByFlag`/
-  `GetGroups`/`FlagsToString`/`FlagsToLong`, generated from `szflags.json`);
-  `SzCoreEnvironment` process-singleton enforcement + `GetActiveInstance()`;
-  builder blank→default normalization; two missing `SzEnvironmentDestroyedException`
-  constructors.
+All five issues are closed; the 4 code/doc commits are pushed to `origin/main`.
 
-## Commits (on `main`, pushed)
+- **#7** — closed won't-fix (C# parity concern, no code change warranted).
+- **#8** — documented the `internal://` single-environment-lifetime constraint →
+  commit `678458e`.
+- **#9** — documented that subsystem accessors bind by reference (env-owned,
+  invalidated after `Destroy()`) → commit `7bb8d1e`.
+- **#10** — flag ergonomics: added `explicit operator int64_t()` to
+  `tools/gen_flags.py` (regenerates into `SzFlags.hpp`) plus a README
+  "Working with flags" section → commit `81950ed`.
+- **#11** — `add_subdirectory` embedding: gate `SZ_CPP_SDK_BUILD_TESTS` /
+  `SZ_BUILD_EXAMPLES` / `SZ_CPP_SDK_ENABLE_ASAN` defaults on top-level detection,
+  fix 17 mis-scoped `CMAKE_SOURCE_DIR` / `CMAKE_BINARY_DIR` refs (→
+  `CMAKE_CURRENT_*`), and add a README embed recipe → commit `f76de0d`.
 
-`e7f6e35` docs+flags+harness+part1 → `8d86bf8` environment+singleton →
-`174cd80` engine basics → `7cf5c61` SzRecord → `24cfe49` configmanager →
-`393269d` engine read → `1aea68e` engine write/why/how/graph →
-`2b9b500` demos + parity notes.
+## Session commits (on `main`, pushed)
 
-## CI / Docs — both GREEN (verified on GitHub Actions)
+`7bb8d1e` docs: accessors by reference (#9) → `678458e` docs: internal:// lifetime
+(#8) → `81950ed` flags: explicit int64_t + docs (#10) → `f76de0d` build:
+add_subdirectory embedding (#11).
 
-- **CI** (`Build & real-engine tests`): GREEN on `aaa3bf4` (run 28332450273) —
-  Install ✓ Configure ✓ Build ✓ Test ✓. This is the first green CI run. Two real
-  bugs were fixed to get there:
-  - the Senzing install hung forever because `sudo` stripped `SENZING_ACCEPT_EULA`
-    from the package postinst (fixed: pass it explicitly through `sudo`);
-  - configure failed the empty-submodule guard because checkout didn't fetch
-    submodules (fixed: `submodules: true` — needed for the nlohmann/json test dep).
-- **Docs** (Pages deploy): GREEN — Doxygen generation + Pages deploy succeed.
+## Verification (prep, this session)
 
-## Review-hardening pass (4-agent audit → fixes → re-audit, stable)
+- `cmake --build build`: clean.
+- `ctest`: 207/207 pass (real engine, ASan).
+- `git status`: clean before prep doc-sync; prep edits to CHANGELOG/STATUS/
+  NEXT_STEPS + the `docs.yml` pinning fix are committed in the prep follow-up
+  commit (pending push).
+- Actions pinning: all third-party actions now SHA-pinned + tag comment —
+  `actions/checkout` plus the two Pages actions (`upload-pages-artifact` @v5.0.0,
+  `deploy-pages` @v5.0.0), fixed this session.
 
-A parallel 4-agent audit (parity/completeness, SDK correctness, test integrity,
-modern C++ style) drove a round of fixes; a 2-agent re-audit confirmed all resolved
-with no regressions. Net: suite **207/207 green**, CI green on `39a53b4`.
+## Background tasks
 
-- SDK code: no correctness defects found. Fixed one C# divergence — the builder now
-  trims non-blank instanceName/settings.
-- Test integrity: `ParseJsonObject/Array` now throw on bad input (no discarded-node
-  deref); the redo test is no longer a no-op (asserts redo enqueued → drains →
-  empty); weak `.find('{')` checks replaced with JSON parsing + contract-key /
-  round-trip assertions; added engine error-path coverage (Unknown/NotFound) to
-  Why/How/Graph; validated all 28 aggregate/default flag constants vs szflags.json.
-- Tech debt: the previously-dead `sz_record.hpp` builder is now used (shared
-  `sz_sample_records.hpp` dedups R1/R2/R3 across suites) and unit-tested; the magic
-  `+12`/`+14` JSON substring offsets were eliminated (tests use a shared
-  `EntityIdOf`; examples use a `key.size()` form).
-- Honesty: PARITY_NOTES now explicitly discloses that the engine suites do not
-  replicate the C# flag-combination cartesian matrices / deep per-flag schema
-  validation (version-sensitive) — method/error/resolution coverage is complete.
+None outstanding. (This session's build/ctest ran to completion.)
 
 ## Notes
 
-- The combined `test/SzCoreEngineTest.cpp` has been **retired**; its coverage lives
-  in the 5 split engine suites + SzCoreEnvironmentTest (199 unique tests).
-- Coverage of the huge C# flag-combination matrices is represented by the C# flag
-  *sets* (not the full cartesian products) — see suite headers.
-- Old pre-fix CI runs may still show `in_progress` until GitHub's 6h auto-timeout;
-  they were the hung EULA runs and are superseded by the green run above.
+- No `.clang-format` and no repo cppcheck config yet — both format/static-analysis
+  gates are mechanically skipped in prep (see NEXT_STEPS optional hardening).
+- Coverage of the C# flag-combination cartesian matrices is represented by the C#
+  flag *sets*, not full products — see `test/PARITY_NOTES.md` and suite headers.

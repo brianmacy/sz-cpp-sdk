@@ -1,25 +1,26 @@
 # Next steps
 
-Branch `main` (pushed). In priority order:
+Branch `main`. This session's 5 issues (#7–#11) are all closed. The prep
+doc-sync + Pages-actions SHA-pinning were committed together in the follow-up
+prep commit; **that commit still needs to be pushed** to `origin/main`.
 
-1. **Confirm the first CI run is green.** Watch `gh run watch 28324916960` (or
-   `gh run list --branch main --limit 1`). If it fails, read the failing step —
-   the most likely culprits are the Senzing 4.3.2 apt package names/versions
-   (`senzingsdk-runtime`, `senzingsdk-setup`) resolving on the GitHub runner, or
-   the `sqlite3`-based schema-create step in `test/sz_test_repo.hpp`. Fix and push.
+In priority order:
 
-2. **After committing the `/prep` follow-up, re-push and confirm the new CI run.**
-   The follow-up hash-pinned `actions/checkout` and added `dependabot.yml` +
-   `CHANGELOG.md` + handoff docs; a fresh push triggers another CI run to verify.
+1. **Push the prep commit** (doc-sync + `docs.yml` SHA-pinning) to `origin/main`.
 
-3. **Broaden test coverage toward 1:1 parity with the C# SDK test suite** — add
-   per-method cases the current representative suite doesn't yet cover (edge cases,
-   error/exception paths, flag-combination behavior).
+2. **Reconcile the Active Claude Sessions Confluence page** (id 3589111809) — the
+   /prep Criterion-9 gate. Blocked on Atlassian MCP auth (interactive OAuth);
+   authenticate, then add/refresh the row for `/home/bmacy/open_dev/sz-cpp-sdk`.
 
-4. **Optional hardening**: add a `.clang-format` so format is a real gate (today
-   it is skipped — no config); consider a `cppcheck` CI step scoped to `src/` +
-   `include/` (excluding gtest macro false positives).
+3. **Add a `.clang-format`** so formatting is a real prep gate (today it is
+   skipped — no config).
 
-5. **Version tracking**: when Senzing 4.4.x promotes to the production apt repo,
+4. **Add a scoped `cppcheck`** step/config over `src/` + `include/` (excluding
+   gtest macro false positives) so static analysis is a real gate.
+
+5. **Broaden test coverage toward 1:1 C# parity** — per-method edge/error-path and
+   flag-combination cases the representative suite does not yet cover.
+
+6. **Version tracking**: when Senzing 4.4.x promotes to the production apt repo,
    bump `SENZING_VERSION` in `.github/workflows/ci.yml` (flags/errors regenerate
    from the installed JSON, so no source change is needed).
