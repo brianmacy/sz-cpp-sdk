@@ -1,7 +1,8 @@
 # Status
 
-Branch: `main` — all work pushed to `origin/main` (HEAD `f76de0d`). Working tree
-clean. No feature branch, no open PR (commits land directly on the default branch).
+Branch: `main` — all work pushed to `origin/main` (HEAD `27bbed5`, in sync).
+Working tree clean. No open PR. A `4.3.0-2` release is being prepared next (via a
+`release/4.3.0-2` PR).
 
 ## Where things stand
 
@@ -33,15 +34,15 @@ All five issues are closed; the 4 code/doc commits are pushed to `origin/main`.
 
 `7bb8d1e` docs: accessors by reference (#9) → `678458e` docs: internal:// lifetime
 (#8) → `81950ed` flags: explicit int64_t + docs (#10) → `f76de0d` build:
-add_subdirectory embedding (#11).
+add_subdirectory embedding (#11) → `27bbed5` docs+ci: prep handoff sync + SHA-pin
+Pages actions. All pushed; `origin/main` in sync.
 
 ## Verification (prep, this session)
 
 - `cmake --build build`: clean.
 - `ctest`: 207/207 pass (real engine, ASan).
-- `git status`: clean before prep doc-sync; prep edits to CHANGELOG/STATUS/
-  NEXT_STEPS + the `docs.yml` pinning fix are committed in the prep follow-up
-  commit (pending push).
+- `git status`: clean, `origin/main` in sync. Prep edits to CHANGELOG/STATUS/
+  NEXT_STEPS + the `docs.yml` pinning fix were committed and pushed in `27bbed5`.
 - Actions pinning: all third-party actions now SHA-pinned + tag comment —
   `actions/checkout` plus the two Pages actions (`upload-pages-artifact` @v5.0.0,
   `deploy-pages` @v5.0.0), fixed this session.

@@ -1,16 +1,20 @@
 # Next steps
 
-Branch `main`. This session's 5 issues (#7–#11) are all closed. The prep
-doc-sync + Pages-actions SHA-pinning were committed together in the follow-up
-prep commit; **that commit still needs to be pushed** to `origin/main`.
+Branch `main`, HEAD `27bbed5` (pushed, in sync). This session's 5 issues
+(#7–#11) are all closed and all commits are on `origin/main`.
 
 In priority order:
 
-1. **Push the prep commit** (doc-sync + `docs.yml` SHA-pinning) to `origin/main`.
+1. **Cut the `4.3.0-2` release.** Branch `release/4.3.0-2`, finalize CHANGELOG
+   `[Unreleased]` → `[4.3.0-2] - 2026-08-28`, open a PR, merge to `main`, then
+   tag `v4.3.0-2` and create the GitHub release (prev release: `v4.3.0-1`).
+   `/prep --full` passed release-grade (207/207, examples run live, actions
+   pinned; doxygen builds in CI via `docs.yml`).
 
 2. **Reconcile the Active Claude Sessions Confluence page** (id 3589111809) — the
-   /prep Criterion-9 gate. Blocked on Atlassian MCP auth (interactive OAuth);
-   authenticate, then add/refresh the row for `/home/bmacy/open_dev/sz-cpp-sdk`.
+   /prep Criterion-9 gate. Add the row for `/home/bmacy/open_dev/sz-cpp-sdk` at
+   the TOP of the table (safe manual add; the automated round-trip risks
+   clobbering the 59 KB shared page).
 
 3. **Add a `.clang-format`** so formatting is a real prep gate (today it is
    skipped — no config).
