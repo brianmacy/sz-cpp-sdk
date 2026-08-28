@@ -32,6 +32,12 @@ own `version-build` packaging scheme).
 - SHA-pinned the `actions/upload-pages-artifact` and `actions/deploy-pages`
   GitHub Actions in `docs.yml` (were tag-pinned) so every third-party action is
   hash-pinned with a Dependabot-updatable tag comment.
+- Generated `SzFlags.hpp` now forms per-bit masks with an unsigned shift
+  (`static_cast<int64_t>(1ULL << index)`) instead of a signed `1LL << index` in
+  the flag-reflection helpers, clearing the cppcheck `shiftTooManyBitsSigned`
+  portability finding at bit 63 (a signed shift into the sign bit is
+  implementation-defined). Bit pattern is unchanged on two's-complement targets;
+  no API or value change (#13).
 
 ### Documentation
 

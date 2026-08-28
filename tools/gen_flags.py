@@ -439,7 +439,7 @@ inline std::string SzFlags::FlagsToString(SzFlags flag) {{
         appendNames(whole->second);
     }} else {{
         for (int index = 0; index < 64; ++index) {{
-            const int64_t singleBit = (1LL << index);
+            const int64_t singleBit = static_cast<int64_t>(1ULL << index);
             if ((value & singleBit) == 0) {{
                 continue;
             }}
@@ -471,7 +471,7 @@ inline std::string SzFlags::FlagsToString(SzFlagUsageGroup group, SzFlags flag) 
         out += "{{ NONE }}";
     }} else {{
         for (int index = 0; index < 64; ++index) {{
-            const int64_t singleBit = (1LL << index);
+            const int64_t singleBit = static_cast<int64_t>(1ULL << index);
             if ((value & singleBit) == 0) {{
                 continue;
             }}
