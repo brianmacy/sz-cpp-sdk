@@ -114,6 +114,17 @@ int main() {
 Run with `LD_LIBRARY_PATH=/opt/senzing/er/lib`. The runnable example programs
 (load, search, get/why/how, export) are in [`examples/`](examples/).
 
+> **Bind subsystem accessors by reference.** `GetEngine()`, `GetProduct()`,
+> `GetConfigManager()`, and `GetDiagnostic()` return references to *abstract*
+> interface types, so `auto engine = env->GetEngine();` (or
+> `SzEngine engine = env->GetEngine();`) will **not** compile. Use `auto&` /
+> `SzEngine&`. The environment owns these objects; the reference is valid only
+> until `Destroy()`.
+>
+> ```cpp
+> SzEngine& engine = env->GetEngine();   // reference — NOT `auto engine = ...`
+> ```
+
 ## Consuming the SDK
 
 ### `add_subdirectory`

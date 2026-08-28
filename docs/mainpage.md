@@ -47,6 +47,16 @@ std::string info = engine.AddRecord("CUSTOMERS", "1001", recordJson);
 env->Destroy();
 ```
 
+@note **Bind subsystem accessors by reference.** `GetEngine()`, `GetProduct()`,
+`GetConfigManager()`, and `GetDiagnostic()` return references to *abstract*
+interface types, so `auto engine = env->GetEngine();` or
+`SzEngine engine = env->GetEngine();` fails to compile (abstract, non-copyable).
+Always bind with `auto&` / `SzEngine&`. The environment owns these objects; the
+reference is valid only until `Destroy()` — calling through it afterward throws
+\ref senzing::sdk::SzEnvironmentDestroyedException "SzEnvironmentDestroyedException".
+(In C# the natural `SzEngine engine = env.GetEngine();` works because the type is a
+reference type; in C++ it must be `SzEngine& engine = env->GetEngine();`.)
+
 See the `examples/` directory for runnable, per-subsystem programs.
 
 ## Exceptions
