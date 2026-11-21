@@ -21,7 +21,8 @@ Two rules govern the port, and they are different:
    substitution changes the public contract, keep the C# shape.
 
 **Status: implemented.** All six subsystems (`SzEnvironment`, `SzEngine`, `SzConfig`,
-`SzConfigManager`, `SzProduct`, `SzDiagnostic`) are built in `senzing::sdk` (interfaces) and
+`SzConfigManager`, `SzProduct`, `SzDiagnostic`) plus `SzLogging` (`SzEnvironment::GetLogging()`, over
+the native `libSzLogging` API; designed after sz-rust-sdk 4.5.0, ahead of C#) are built in `senzing::sdk` (interfaces) and
 `senzing::sdk::core` (native-backed impl over `libSz`), with a passing GoogleTest suite that runs
 against the real engine, runnable examples, CMake install/`find_package` export, and CI. The sections
 below remain the authoritative design rationale and contract; the build/test commands are now real.
@@ -134,7 +135,7 @@ At the native boundary, translate native return codes into the correct exception
 ## Native library binding
 
 `senzing::sdk::core` links the Senzing native library: `libSz.so` (Linux), `libSz.dylib` (macOS),
-`Sz.dll` (Windows). The native lib has further Senzing-provided dependencies that must also be on the
+`Sz.dll` (Windows); `SzLogging` binds the C API in `libSzLogging.h` (Senzing 4.5.0+). The native lib has further Senzing-provided dependencies that must also be on the
 library path at runtime. Use the MCP (`sdk_guide` topic=`install`, and `find_examples`) for the
 authoritative install layout, env vars, and engine-configuration JSON shape — do not guess paths.
 
@@ -185,8 +186,10 @@ stable C and unaffected by the above.
 ## Build / test
 
 **C++20**, **CMake + Ninja**, **GoogleTest** (fetched via `FetchContent`, pinned `v1.15.2`), with
-**ASan** on by default for the dev/test build. Requires Senzing 4.4.x installed at `/opt/senzing`
-(headers `-I/opt/senzing/er/sdk/c`, link `/opt/senzing/er/lib/libSz.so`).
+**ASan** on by default for the dev/test build. Requires **Senzing 4.5.0+** (first release with
+`libSzLogging.h`; configure fails without it) installed at `/opt/senzing` (headers
+`-I/opt/senzing/er/sdk/c`, link `/opt/senzing/er/lib/libSz.so`). macOS: the Homebrew `senzingsdk` cask
+with `-DSZ_NATIVE_ROOT=/opt/homebrew/opt/senzing/er` (README recipe).
 
 ```bash
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug          # -DSZ_BUILD_EXAMPLES=ON (default), -DSZ_CPP_SDK_ENABLE_ASAN=OFF to disable ASan
@@ -195,11 +198,16 @@ LD_LIBRARY_PATH=/opt/senzing/er/lib ctest --test-dir build --output-on-failure  
 LD_LIBRARY_PATH=/opt/senzing/er/lib ctest --test-dir build -R <TestName>          # single test/regex
 ```
 
-- Tests run against the **real** native library — no mocks (global standard). The CTest properties
-  auto-apply the ASan/`LD_PRELOAD` `libsz_no_deepbind` shim (works around libSz `dlopen`ing its sqlite
-  plugin with `RTLD_DEEPBIND`, which ASan hard-aborts on; the shim edits only that one dlopen flag).
-- Resolution tests use a local SQLite repo: the `SzTestRepo` fixture (`test/sz_test_repo.hpp`) copies
-  `/opt/senzing/er/resources/templates/G2C.db`, builds the settings JSON, and bootstraps a default
+- Tests run against the **real** native library — no mocks (global standard). On Linux ASan builds
+  CTest preloads the `libsz_no_deepbind` shim + ASan runtime (libSz `dlopen`s its sqlite plugin with
+  `RTLD_DEEPBIND`, which ASan hard-aborts on; the shim edits only that one dlopen flag).
+  `gtest_discover_tests` carries only ONE `ENVIRONMENT` entry intact (more are silently dropped), so
+  that entry is `LD_PRELOAD`; ASan options are compiled in by `test/sz_asan_default_options.cpp`, which
+  also unsets `LD_PRELOAD` at startup so the fixtures' `sqlite3` child is not aborted by ASan.
+  Watch for `***Skipped` in ctest output: a fixture that cannot create its repository skips the suite,
+  and ctest does not count skips as failures.
+- Resolution tests use a local SQLite repo: the `SzTestRepo` fixture (`test/sz_test_repo.hpp`) creates a fresh
+  SQLite file from the shipped schema SQL with the `sqlite3` CLI (`test/repo_manager.hpp`), builds the settings JSON, and bootstraps a default
   config via this SDK (`CreateConfig` → `RegisterConfig` → `SetDefaultConfigID`). Never simulate or
   hand-fabricate entity-resolution results.
 - **Flags & error mapping are generated at configure time** (`tools/gen_flags.py` from
