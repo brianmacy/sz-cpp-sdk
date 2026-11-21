@@ -268,6 +268,9 @@ if(SZ_CPP_SDK_BUILD_TESTS)
         test/SzCoreEngineGraphTest.cpp
         test/SzLoggingTest.cpp
         test/SzCoreLoggingTest.cpp)
+    if(SZ_CPP_SDK_ENABLE_ASAN AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_sources(sz_cpp_sdk_tests PRIVATE test/sz_asan_default_options.cpp)
+    endif()
     target_compile_options(sz_cpp_sdk_tests PRIVATE -Wall -Wextra -Wpedantic)
     # test/ is on the include path so suites can pull in the shared header-only
     # repository fixture (test/sz_test_repo.hpp).
@@ -294,13 +297,9 @@ if(SZ_CPP_SDK_BUILD_TESTS)
         SZ_TEST_FLAGS_JSON="${SZ_FLAGS_JSON}")
 
     include(GoogleTest)
-    # ASAN_OPTIONS=alloc_dealloc_mismatch=0: the closed-source libSz.so internally
-    # allocates with malloc and releases through a C++ operator delete on the same
-    # buffer (the mismatch is entirely within libSz frames -- allocation and free
-    # both inside the library, not at our FFI boundary). ASan flags this as an
-    # alloc-dealloc-mismatch false positive for third-party code we cannot change.
-    # Disabling only this one check keeps full ASan coverage of OUR code (use after
-    # free, OOB, leaks all remain active).
+    # ASan options (alloc_dealloc_mismatch=0, verify_asan_link_order=0) are
+    # compiled into the test binary by test/sz_asan_default_options.cpp; see that
+    # file for why each is needed.
     #
     # The database-backed tests additionally need the RTLD_DEEPBIND interposer:
     # libSz dlopens its SQLite plugin with RTLD_DEEPBIND, which the ASan runtime
@@ -310,9 +309,12 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     # allows the shim to precede the runtime in the preload list. ASan coverage of
     # our code is unaffected (the shim only edits a flag passed to dlopen).
     #
-    # ENVIRONMENT must be a single semicolon-separated CMake list value so that
-    # all entries register on the test (passing multiple quoted args makes ctest
-    # treat the 2nd as a new property name and silently drop it).
+    # ENVIRONMENT must hold exactly ONE entry: gtest_discover_tests re-splits a
+    # multi-entry ENVIRONMENT list into separate arguments, so ctest applies only
+    # the first entry and reads the rest as property names (verified: with
+    # "LD_LIBRARY_PATH=..;LD_PRELOAD=..;ASAN_OPTIONS=.." only LD_LIBRARY_PATH
+    # reached the test, so the DEEPBIND shim was never preloaded). The test binary
+    # finds libSz through its RUNPATH, so LD_LIBRARY_PATH is not needed there.
     if(APPLE)
         # macOS (e.g. the Homebrew senzingsdk cask, SZ_NATIVE_ROOT=
         # /opt/homebrew/opt/senzing/er): no RTLD_DEEPBIND, so no interposer is
@@ -325,8 +327,7 @@ if(SZ_CPP_SDK_BUILD_TESTS)
             COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libasan.so
             OUTPUT_VARIABLE SZ_ASAN_RT
             OUTPUT_STRIP_TRAILING_WHITESPACE)
-        set(SZ_TEST_ENV
-            "LD_LIBRARY_PATH=${SZ_NATIVE_ROOT}/lib\;LD_PRELOAD=$<TARGET_FILE:sz_no_deepbind>:${SZ_ASAN_RT}\;ASAN_OPTIONS=alloc_dealloc_mismatch=0:verify_asan_link_order=0")
+        set(SZ_TEST_ENV "LD_PRELOAD=$<TARGET_FILE:sz_no_deepbind>:${SZ_ASAN_RT}")
     else()
         set(SZ_TEST_ENV "LD_LIBRARY_PATH=${SZ_NATIVE_ROOT}/lib")
     endif()

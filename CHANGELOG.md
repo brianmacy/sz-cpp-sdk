@@ -65,6 +65,17 @@ own `version-build` packaging scheme).
 - `SzEnvironment` gains the pure virtual `GetLogging()`; out-of-tree
   `SzEnvironment` implementations must add it.
 
+### Fixed
+
+- Linux ASan test wiring: the CTest `ENVIRONMENT` list was split by
+  `gtest_discover_tests`, so only `LD_LIBRARY_PATH` reached the tests and the
+  `RTLD_DEEPBIND` shim was never preloaded (latent until Senzing 4.5.0, whose
+  SQLite plugin load ASan then rejected: 85 tests failed). `ENVIRONMENT` now
+  carries only `LD_PRELOAD`; ASan options are compiled into the test binary
+  (`test/sz_asan_default_options.cpp`), which also drops `LD_PRELOAD` at startup
+  so the `sqlite3` CLI child is not aborted by the ASan runtime (that would
+  silently skip every repository-backed suite).
+
 ## [4.3.0-2] - 2026-08-28
 
 ### Added
