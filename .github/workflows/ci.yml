@@ -39,7 +39,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & real-engine tests (Senzing 4.5.x)
+    name: Build & real-engine tests
     runs-on: ubuntu-latest
 
     env:

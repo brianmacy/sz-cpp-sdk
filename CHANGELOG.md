@@ -62,6 +62,8 @@ own `version-build` packaging scheme).
 - CI installs Senzing 4.5.0 (`senzingsdk-runtime` + `senzingsdk-setup`; the
   4.3.x `senzingsdk-tools` pin is no longer needed) and asserts
   `libSzLogging.h` is present.
+- The CI job is named `Build & real-engine tests` (no Senzing version), so a
+  Senzing bump no longer renames the check the `main` ruleset requires.
 - `SzEnvironment` gains the pure virtual `GetLogging()`; out-of-tree
   `SzEnvironment` implementations must add it.
 
