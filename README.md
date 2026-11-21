@@ -57,6 +57,18 @@ LD_LIBRARY_PATH=/opt/senzing/er/lib ctest --test-dir build
 The test suite runs against the real native engine (no mocks); it provisions a
 fresh local SQLite repository per test from the shipped schema template.
 
+On macOS with the Homebrew `senzingsdk` cask, point the cache variables at the
+cask layout; CTest then sets `DYLD_LIBRARY_PATH` (the `RTLD_DEEPBIND` ASan shim is
+Linux-only and not needed there):
+
+```bash
+R=/opt/homebrew/opt/senzing
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+      -DSZ_NATIVE_ROOT=$R/er -DSZ_NATIVE_LIB=$R/er/lib/libSz.dylib \
+      -DSZ_SUPPORT_PATH=$R/data -DSZ_CONFIG_PATH=$R/er/etc
+cmake --build build && ctest --test-dir build
+```
+
 ### Useful CMake options
 
 | Option | Default | Effect |

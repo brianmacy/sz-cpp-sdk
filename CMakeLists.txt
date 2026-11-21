@@ -234,7 +234,7 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     # compatible with the ASan runtime (see test/sz_no_deepbind.c for the full
     # rationale). Built WITHOUT ASan (plain C, its own target) and preloaded for
     # the test executable only. Only needed when ASan is enabled.
-    if(SZ_CPP_SDK_ENABLE_ASAN)
+    if(SZ_CPP_SDK_ENABLE_ASAN AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         enable_language(C)
         add_library(sz_no_deepbind SHARED test/sz_no_deepbind.c)
         target_link_libraries(sz_no_deepbind PRIVATE ${CMAKE_DL_LIBS})
@@ -297,7 +297,12 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     # ENVIRONMENT must be a single semicolon-separated CMake list value so that
     # all entries register on the test (passing multiple quoted args makes ctest
     # treat the 2nd as a new property name and silently drop it).
-    if(SZ_CPP_SDK_ENABLE_ASAN)
+    if(APPLE)
+        # macOS (e.g. the Homebrew senzingsdk cask, SZ_NATIVE_ROOT=
+        # /opt/homebrew/opt/senzing/er): no RTLD_DEEPBIND, so no interposer is
+        # needed under ASan; the loader path variable is DYLD_LIBRARY_PATH.
+        set(SZ_TEST_ENV "DYLD_LIBRARY_PATH=${SZ_NATIVE_ROOT}/lib")
+    elseif(SZ_CPP_SDK_ENABLE_ASAN)
         # Resolve the compiler's ASan runtime so it can be explicitly preloaded
         # after the interposer.
         execute_process(
