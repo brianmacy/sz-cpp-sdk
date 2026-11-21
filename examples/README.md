@@ -14,6 +14,7 @@ environment on exit (RAII `EnvGuard`, the C++ equivalent of a `finally` block).
 | `sz_search_records` | Search the repository with `SzEngine::SearchByAttributes`. |
 | `sz_get_why_how` | Resolve a record to its entity, then `GetEntity`, `WhyRecordInEntity`, `HowEntity`. |
 | `sz_export_report` | Stream a JSON entity report (`ExportJsonEntityReport` / `FetchNext` / `CloseExportReport`). |
+| `sz_logging_demo` | Capture native log messages with `SzLogging` (Senzing >= 4.5.0): register a callback before init, silence the default output, run the engine, `Destroy()`, then unregister (the 4.5.0 usage rule). |
 
 ### Per-subsystem demos (mirror the C# `Senzing.Sdk.Demo` project)
 
@@ -37,7 +38,7 @@ the run instructions below provision one.
 
 ## Prerequisites
 
-- Senzing 4.4.x installed at `/opt/senzing` (see the top-level `README.md`).
+- Senzing 4.5.0 or newer installed at `/opt/senzing` (see the top-level `README.md`).
 - A built tree: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug && cmake --build build`.
 
 ## Running with a local SQLite repository
@@ -77,6 +78,7 @@ seeded from the schema-only template that ships with Senzing.
    LD_LIBRARY_PATH=/opt/senzing/er/lib ./build/sz_search_records
    LD_LIBRARY_PATH=/opt/senzing/er/lib ./build/sz_get_why_how
    LD_LIBRARY_PATH=/opt/senzing/er/lib ./build/sz_export_report
+   LD_LIBRARY_PATH=/opt/senzing/er/lib ./build/sz_logging_demo
    ```
 
 ### AddressSanitizer builds

@@ -60,6 +60,13 @@ set(SZ_SCHEMA_SQL "${SZ_RESOURCE_PATH}/schema/szcore-schema-sqlite-create.sql"
 if(NOT EXISTS "${SZ_NATIVE_INCLUDE}")
     message(FATAL_ERROR "Senzing native headers not found at ${SZ_NATIVE_INCLUDE}")
 endif()
+# Senzing >= 4.5.0 is the minimum: SzLogging binds libSzLogging.h (first shipped
+# in 4.5.0; the SzLogging_* symbols are exported by libSz itself).
+if(NOT EXISTS "${SZ_NATIVE_INCLUDE}/libSzLogging.h")
+    message(FATAL_ERROR
+        "libSzLogging.h not found in ${SZ_NATIVE_INCLUDE}: this SDK requires "
+        "Senzing >= 4.5.0")
+endif()
 if(NOT EXISTS "${SZ_NATIVE_LIB}")
     message(FATAL_ERROR "Senzing native library not found at ${SZ_NATIVE_LIB}")
 endif()
@@ -105,7 +112,8 @@ add_library(sz_cpp_sdk
     src/core/SzCoreConfigManager.cpp
     src/core/SzCoreDiagnostic.cpp
     src/core/SzCoreEngine.cpp
-    src/core/SzCoreEnvironment.cpp)
+    src/core/SzCoreEnvironment.cpp
+    src/core/SzCoreLogging.cpp)
 
 add_dependencies(sz_cpp_sdk sz_codegen)
 
@@ -154,7 +162,9 @@ if(SZ_BUILD_EXAMPLES)
         sz_config_demo
         sz_configmanager_demo
         sz_diagnostic_demo
-        sz_engine_demo)
+        sz_engine_demo
+        # Native logging (SzLogging, Senzing >= 4.5.0).
+        sz_logging_demo)
     foreach(example ${SZ_EXAMPLE_PROGRAMS})
         add_executable(${example} "examples/${example}.cpp")
         target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic)
@@ -255,11 +265,17 @@ if(SZ_CPP_SDK_BUILD_TESTS)
         test/SzCoreEngineWriteTest.cpp
         test/SzCoreEngineWhyTest.cpp
         test/SzCoreEngineHowTest.cpp
-        test/SzCoreEngineGraphTest.cpp)
+        test/SzCoreEngineGraphTest.cpp
+        test/SzLoggingTest.cpp
+        test/SzCoreLoggingTest.cpp)
     target_compile_options(sz_cpp_sdk_tests PRIVATE -Wall -Wextra -Wpedantic)
     # test/ is on the include path so suites can pull in the shared header-only
     # repository fixture (test/sz_test_repo.hpp).
-    target_include_directories(sz_cpp_sdk_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test")
+    # src/core is also visible so SzCoreLoggingTest can drive the internal
+    # logging trampoline (src/core/sz_logging_detail.hpp) directly.
+    target_include_directories(sz_cpp_sdk_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/test"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core")
     target_link_libraries(sz_cpp_sdk_tests
         PRIVATE sz_cpp_sdk GTest::gtest GTest::gtest_main
                 nlohmann_json::nlohmann_json)

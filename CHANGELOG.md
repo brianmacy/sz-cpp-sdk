@@ -11,6 +11,60 @@ own `version-build` packaging scheme).
 
 ## [Unreleased]
 
+### Added
+
+- **Minimum Senzing version is now 4.5.0**: the SDK binds the native logging API
+  (`libSzLogging.h`, first shipped in Senzing 4.5.0; symbols exported by `libSz`).
+  CMake fails at configure time with a clear message if the header is missing.
+- `SzLogging` — native logging over libSzLogging, obtained with the new
+  `SzEnvironment::GetLogging()` (no native init; also works after `Destroy()`).
+  **This API leads the C# SDK**, which has no logging API yet; it ports the Rust
+  SDK v4.5.0 design with C#-style PascalCase names (`docs/csharp-sdk-api.md`).
+  All state stays native: no SDK registry, dispatch or formatting.
+  - `RegisterCallback` returns an RAII `std::unique_ptr<SzLogRegistration>`
+    (destruction unregisters; `Unregister()`, `Leak()`); `SetDefaultCallback`;
+    `SetDefaultOutput(SzLogOutput)` (stderr, stdout, file, null);
+    `SetDefaultFormat`; `SetDefaultLogLevel`; `GetEffectiveLogLevel`.
+  - Types `SzLogLevel`, `SzLogFormat` (`ToString`, `ParseSzLogLevel` /
+    `ParseSzLogFormat`, `operator<<`, `SzLogLevels` / `SzLogFormats`),
+    `SzLogOutput` / `SzLogOutputType`, `SzLogCallbackOptions` (implicit from a
+    level; default format `Bare`), `SzLogRecord` (borrowed), `SzLogEntry`
+    (owned), `SzLogCallback` (`std::function`), `SzLogCapture`.
+  - Callbacks run behind a `noexcept` trampoline: exceptions are caught and
+    discarded, never propagated into native code.
+  - File output is pre-opened (creating missing parent directories) and throws
+    `SzBadInputException` naming the path if it cannot be opened (4.5.0 reports
+    no status).
+  - Documented (not enforced) Senzing 4.5.0 usage rule: change registrations,
+    the default callback, output or format only while no engine threads run
+    (before the first init or after `Destroy()`); level set/get is safe at any
+    time. Also documented: `VerboseLogging` vs. user configuration, 4.5.0 file
+    flushing, and that a replaced default callback / a registration destroyed
+    inside a callback are leaked (4.5.0 has no release hook).
+  - Needs Senzing >= 4.5.1 / 4.6.0 (final signatures; throw
+    `SzConfigurationException` naming the native function until then, marked
+    `SZ-FUTURE`): `SzLogRegistration::SetLevel` / `GetLevel`, `GetDefaultOutput`
+    / `GetDefaultFormat` / `GetDefaultLogLevel`, `SzLogOutput::AppendFile`,
+    `RegisterThreadLocalCallback` / `CaptureThreadLogs` (GDEV-4960), and sink
+    changes from inside a callback; `SzLogRecord` timestamp / thread ID are
+    `std::nullopt`.
+- Tests: `SzLoggingTest` (value types) and `SzCoreLoggingTest` /
+  `SzCoreLoggingEngineTest` (real native libSzLogging, including engine
+  init/destroy and 4-thread concurrent delivery); four `DISABLED_` tests hold
+  the final-shape checks that need Senzing >= 4.5.1 / 4.6.0.
+- Example `sz_logging_demo`.
+- macOS development builds against the Homebrew `senzingsdk` cask: the
+  `RTLD_DEEPBIND` ASan interposer is now Linux-only and CTest sets
+  `DYLD_LIBRARY_PATH` on Apple platforms (README recipe).
+
+### Changed
+
+- CI installs Senzing 4.5.0 (`senzingsdk-runtime` + `senzingsdk-setup`; the
+  4.3.x `senzingsdk-tools` pin is no longer needed) and asserts
+  `libSzLogging.h` is present.
+- `SzEnvironment` gains the pure virtual `GetLogging()`; out-of-tree
+  `SzEnvironment` implementations must add it.
+
 ## [4.3.0-2] - 2026-08-28
 
 ### Added

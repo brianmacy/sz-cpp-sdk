@@ -9,6 +9,7 @@
 #include "senzing/sdk/core/SzCoreConfigManager.hpp"
 #include "senzing/sdk/core/SzCoreDiagnostic.hpp"
 #include "senzing/sdk/core/SzCoreEngine.hpp"
+#include "senzing/sdk/core/SzCoreLogging.hpp"
 #include "senzing/sdk/core/SzCoreProduct.hpp"
 #include "sz_helpers.hpp"
 
@@ -243,6 +244,13 @@ void SzCoreEnvironment::Destroy() {
 bool SzCoreEnvironment::IsDestroyed() {
     std::lock_guard<std::mutex> guard(monitor_);
     return destroyed_;
+}
+
+SzLogging& SzCoreEnvironment::GetLogging() {
+    // No destroyed check (and no lock): logging is process-global native state
+    // that needs no engine initialization, and the Senzing 4.5.0 usage rule
+    // changes it after Destroy(). Mirrors the Rust SDK's get_logging.
+    return SzCoreLogging::GetInstance();
 }
 
 }  // namespace senzing::sdk::core

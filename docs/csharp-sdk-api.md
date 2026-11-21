@@ -57,6 +57,60 @@ SzEnvironment env = SzCoreEnvironment.NewBuilder()
     .Build();
 ```
 
+## `SzLogging` — this API LEADS C# (no C# equivalent yet)
+
+`sz-sdk-csharp@4.3.0` has **no** logging API. The C++ `SzLogging` binds the native
+`libSzLogging.h` API first shipped in **Senzing 4.5.0** and is ported from the **Rust SDK
+v4.5.0** (`src/logging.rs`, `src/core/logging.rs`, `src/traits.rs`), which is the reference
+design; the names below are the C#-style PascalCase spelling of that design so the eventual
+C# (and Java/Python) ports can match it name-for-name. Until C# ships it, this section — not
+the C# source — is the contract. Accessor on the environment (C++ addition, not in C# 4.3.0):
+
+```
+SzLogging& GetLogging();   // no liveness check; works before init and after Destroy()
+```
+
+Interface (`senzing::sdk::SzLogging`, header `SzLogging.hpp`):
+
+```
+unique_ptr<SzLogRegistration> RegisterCallback(SzLogCallbackOptions options, SzLogCallback callback);
+unique_ptr<SzLogRegistration> RegisterThreadLocalCallback(SzLogCallbackOptions options, SzLogCallback callback); // SZ-FUTURE
+void        SetDefaultCallback(SzLogCallbackOptions options, SzLogCallback callback);
+void        SetDefaultOutput(SzLogOutput output);
+SzLogOutput GetDefaultOutput();                  // SZ-FUTURE
+void        SetDefaultFormat(SzLogFormat format);
+SzLogFormat GetDefaultFormat();                  // SZ-FUTURE
+void        SetDefaultLogLevel(SzLogLevel level);
+SzLogLevel  GetDefaultLogLevel();                // SZ-FUTURE
+SzLogLevel  GetEffectiveLogLevel();
+SzLogCapture CaptureThreadLogs(SzLogCallbackOptions options);   // non-virtual helper; SZ-FUTURE
+```
+
+Supporting types: `SzLogLevel` (`Trace`..`Critical`, `Off`; native values 0-6), `SzLogFormat`
+(`Legacy`, `Jsonl`, `Bare`, `Default`), `SzLogOutput` (`Stderr()`, `Stdout()`, `File(path)`,
+`AppendFile(path)` SZ-FUTURE, `Null()`, `Callback()` get-only), `SzLogCallbackOptions`
+(implicit from `SzLogLevel`; default format **Bare**; `WithFormat`), `SzLogRecord` (borrowed
+view valid only inside the callback; `GetLevel`, `GetModule`, `GetThreadHash`, `GetMessage`,
+`GetRawModule`, `GetTimestamp`/`GetTimestampNs`/`GetThreadID` = `nullopt` on 4.5.0, `ToEntry`),
+`SzLogEntry` (owned copy), `SzLogCallback` (`std::function<void(const SzLogRecord&)>`),
+`SzLogRegistration` (RAII: destruction unregisters; `SetLevel`/`GetLevel` SZ-FUTURE,
+`Unregister`, `Leak`), `SzLogCapture` (`Finish`), and `ToString` / `ParseSzLogLevel` /
+`ParseSzLogFormat`.
+
+Rust → C++ mapping notes: Rust's `SzLoggingExt` closure helpers (`register`, `set_default`,
+`register_thread_local`) collapse into the methods above because `std::function` accepts any
+callable and `SzLogCallbackOptions` converts from `SzLogLevel`; `SzError::Configuration` →
+`SzConfigurationException`, `BadInput` → `SzBadInputException`, `Unrecoverable` →
+`SzUnrecoverableException`, `Unknown` → `SzException`; Rust panics → C++ exceptions (caught at the
+native boundary and discarded). Rust's optional `log`-crate forwarding has no C++ counterpart.
+
+Rules (identical to Rust): all state is native; on 4.5.0 change registrations / default
+callback / output / format only while no engine threads run (before first init or after
+`Destroy()`), while level set/get is safe any time; a replaced default callback and a
+registration destroyed inside a callback are leaked (4.5.0 has no release hook); the
+Senzing >= 4.5.1 / 4.6.0 features above throw `SzConfigurationException` naming the native
+function.
+
 ## `SzProduct`
 
 ```

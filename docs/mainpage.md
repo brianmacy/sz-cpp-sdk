@@ -24,6 +24,9 @@ Consumers program against the `senzing::sdk` abstractions; only
 - \ref senzing::sdk::SzConfig "SzConfig" — in-memory configuration document.
 - \ref senzing::sdk::SzProduct "SzProduct" — license and version.
 - \ref senzing::sdk::SzDiagnostic "SzDiagnostic" — repository diagnostics.
+- \ref senzing::sdk::SzLogging "SzLogging" — native log callbacks, levels, formats and the default
+  output (`SzEnvironment::GetLogging()`, Senzing >= 4.5.0). This API leads the C# SDK, which has
+  no logging API yet; the design follows the Rust SDK v4.5.0.
 
 ## Getting started
 

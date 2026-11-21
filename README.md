@@ -33,10 +33,11 @@ no flag or error data is hardcoded.
 
 ## Prerequisites
 
-- **Senzing 4.3.x or 4.4.x** installed at `/opt/senzing` (the engine, native
-  headers, and data files). The public API is identical across these versions and
-  the SDK is verified to build and pass its tests against both. The build expects:
-  - native C headers at `/opt/senzing/er/sdk/c`
+- **Senzing 4.5.0 or newer** installed at `/opt/senzing` (the engine, native
+  headers, and data files). 4.5.0 is the minimum because `SzLogging` binds the
+  native `libSzLogging.h` API first shipped in 4.5.0; configuration fails with a
+  clear message if that header is missing. The build expects:
+  - native C headers (including `libSzLogging.h`) at `/opt/senzing/er/sdk/c`
   - the native library at `/opt/senzing/er/lib/libSz.so`
   - `szflags.json` / `szerrors.json` at `/opt/senzing/er/sdk/`
   These paths are overridable via the `SZ_NATIVE_ROOT` / `SZ_NATIVE_*` CMake
@@ -177,6 +178,59 @@ flags argument), and a flags value can never silently drift into integer
 arithmetic. This deliberate friction is a type-safety guarantee, not an
 oversight.
 
+## Native logging (`SzLogging`)
+
+`env->GetLogging()` returns the `SzLogging` interface over Senzing's native
+logging (`libSzLogging`, Senzing >= 4.5.0): register callbacks, set the default
+output (stderr, stdout, file, null, or a default callback), format and level.
+**This API leads the C# SDK** (which has no logging API yet); the design follows
+the Rust SDK v4.5.0 and the names are its C#-style spelling (see
+[`docs/csharp-sdk-api.md`](docs/csharp-sdk-api.md#szlogging--this-api-leads-c-no-c-equivalent-yet)).
+
+```cpp
+using namespace senzing::sdk;
+SzLogging& logging = env->GetLogging();          // no native init; valid after Destroy()
+logging.SetDefaultOutput(SzLogOutput::Null());   // the callback is the only sink
+auto registration = logging.RegisterCallback(    // RAII: destroying it unregisters
+    SzLogLevel::Info,                            // options default to the Bare format
+    [](const SzLogRecord& r) {                   // may run concurrently on many threads
+        std::cerr << r.GetLevel() << " " << r.GetModule() << ": " << r.GetMessage() << "\n";
+    });
+SzEngine& engine = env->GetEngine();             // initialization messages are captured
+// ... use the engine; SetDefaultLogLevel(...) is safe at any time ...
+env->Destroy();
+registration.reset();                            // after Destroy: nothing else is logging
+logging.SetDefaultOutput(SzLogOutput::Stderr());
+```
+
+- **All state is native.** Each registration is its own native registration;
+  the SDK keeps no registry, dispatcher or formatter.
+- **Senzing 4.5.0 usage rule** (documented, not enforced): change
+  registrations, the default callback, the default output or the default format
+  only while no engine threads run — before the first `GetEngine()` /
+  `GetDiagnostic()` or after `Destroy()`. `SetDefaultLogLevel` /
+  `GetEffectiveLogLevel` are safe at any time.
+- **Callbacks** run synchronously on the logging thread: keep them fast, never
+  call back into the engine, and note that exceptions they throw are caught and
+  discarded at the native boundary. Sink changes from inside a callback throw
+  `SzConfigurationException` on 4.5.0.
+- **File output** (`SzLogOutput::File(path)`) is pre-opened by the SDK (creating
+  missing parent directories) and throws `SzBadInputException` naming the path if
+  it cannot be opened. 4.5.0 flushes it only when the output is replaced or at
+  exit (not at `Destroy()`); `SetDefaultOutput` resets the default format to
+  Legacy, so set the format afterwards.
+- **Leaks by design on 4.5.0**: a replaced default callback, and a registration
+  destroyed from inside a callback, are leaked (no native release hook yet).
+- **Needs Senzing >= 4.5.1 / 4.6.0** (final signatures present; throw
+  `SzConfigurationException` naming the native function until then):
+  `SzLogRegistration::SetLevel` / `GetLevel`, `GetDefaultOutput` /
+  `GetDefaultFormat` / `GetDefaultLogLevel`, `SzLogOutput::AppendFile`,
+  `RegisterThreadLocalCallback` / `CaptureThreadLogs`, sink changes from inside a
+  callback; `SzLogRecord` timestamp / thread ID are `std::nullopt`.
+
+The full rules are documented at the top of `include/senzing/sdk/SzLogging.hpp`;
+`examples/sz_logging_demo.cpp` is a runnable walkthrough.
+
 ## Consuming the SDK
 
 ### `add_subdirectory`
@@ -250,5 +304,5 @@ installation present.
 - [`docs/csharp-sdk-api.md`](docs/csharp-sdk-api.md) — the C# public API surface
   this SDK mirrors (the port contract).
 - [`docs/native-ffi-contract.md`](docs/native-ffi-contract.md) — the native
-  `libSz` C ABI the core layer binds.
+  `libSz` C ABI the core layer binds (including the `SzLogging_*` logging API).
 - [`examples/README.md`](examples/README.md) — how to run the example programs.
