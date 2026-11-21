@@ -11,6 +11,10 @@ own `version-build` packaging scheme).
 
 ## [Unreleased]
 
+## [4.3.0-3] - 2026-11-21
+
+SzLogging (designed after sz-rust-sdk 4.5.0); the minimum Senzing version is now 4.5.0.
+
 ### Added
 
 - **Minimum Senzing version is now 4.5.0**: the SDK binds the native logging API
@@ -77,6 +81,11 @@ own `version-build` packaging scheme).
   (`test/sz_asan_default_options.cpp`), which also drops `LD_PRELOAD` at startup
   so the `sqlite3` CLI child is not aborted by the ASan runtime (that would
   silently skip every repository-backed suite).
+
+### Documentation
+
+- `CLAUDE.md`: Senzing 4.5.0 minimum, `SzLogging`, macOS cask builds, the Linux ASan test wiring,
+  and the sqlite3-CLI repository fixture.
 
 ## [4.3.0-2] - 2026-08-28
 
