@@ -3,7 +3,8 @@
 // Per docs/native-ffi-contract.md we bind the Senzing-shipped C headers
 // directly (compiled with -I/opt/senzing/er/sdk/c) rather than hand-declaring
 // externs. The classic headers (libSz*.h) provide init/destroy/reinit, the
-// per-module getLastException* accessors, and SzProduct_get{License,Version};
+// per-module getLastException* accessors, SzProduct_get{License,Version} and
+// the SzLogging_* logging API (libSzLogging.h, Senzing >= 4.5.0);
 // the helper header provides the struct-returning `*_helper` functions and
 // SzHelper_free. All are already `extern "C"`-wrapped.
 #ifndef SENZING_SDK_CORE_NATIVE_FFI_HPP
@@ -14,6 +15,7 @@
 #include "libSzConfig.h"
 #include "libSzConfigMgr.h"
 #include "libSzDiagnostic.h"
+#include "libSzLogging.h"  // Senzing >= 4.5.0: SzLogging_* (exported by libSz)
 #include "libSzProduct.h"
 
 // Helper ABI: per-function struct-returning convenience layer + SzHelper_free.

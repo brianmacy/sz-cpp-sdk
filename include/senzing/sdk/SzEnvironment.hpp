@@ -12,6 +12,7 @@
 #include "senzing/sdk/SzConfigManager.hpp"
 #include "senzing/sdk/SzDiagnostic.hpp"
 #include "senzing/sdk/SzEngine.hpp"
+#include "senzing/sdk/SzLogging.hpp"
 #include "senzing/sdk/SzProduct.hpp"
 
 namespace senzing::sdk {
@@ -45,6 +46,23 @@ public:
 
     /// Returns true once Destroy() has been initiated/completed.
     virtual bool IsDestroyed() = 0;
+
+    /// Returns the logging interface: native libSzLogging callbacks, levels,
+    /// formats and the default output. (Leads the C# SDK, which has no
+    /// SzLogging yet; see SzLogging.hpp.)
+    ///
+    /// Logging is process-global native state, so every SzLogging obtained here
+    /// controls the same native logger. This call performs no native
+    /// initialization, so callbacks can be registered BEFORE the first
+    /// GetEngine() (or any other subsystem): that captures initialization
+    /// messages, and on Senzing 4.5.0 it is required by the usage rule.
+    /// Registrations outlive Destroy() and Reinitialize().
+    ///
+    /// Unlike the other accessors it never throws and also works AFTER
+    /// Destroy(), which is when the 4.5.0 usage rule allows changing
+    /// registrations and the default output. The reference is valid for the
+    /// life of the process.
+    virtual SzLogging& GetLogging() = 0;
 };
 
 }  // namespace senzing::sdk

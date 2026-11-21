@@ -60,6 +60,13 @@ set(SZ_SCHEMA_SQL "${SZ_RESOURCE_PATH}/schema/szcore-schema-sqlite-create.sql"
 if(NOT EXISTS "${SZ_NATIVE_INCLUDE}")
     message(FATAL_ERROR "Senzing native headers not found at ${SZ_NATIVE_INCLUDE}")
 endif()
+# Senzing >= 4.5.0 is the minimum: SzLogging binds libSzLogging.h (first shipped
+# in 4.5.0; the SzLogging_* symbols are exported by libSz itself).
+if(NOT EXISTS "${SZ_NATIVE_INCLUDE}/libSzLogging.h")
+    message(FATAL_ERROR
+        "libSzLogging.h not found in ${SZ_NATIVE_INCLUDE}: this SDK requires "
+        "Senzing >= 4.5.0")
+endif()
 if(NOT EXISTS "${SZ_NATIVE_LIB}")
     message(FATAL_ERROR "Senzing native library not found at ${SZ_NATIVE_LIB}")
 endif()
@@ -105,7 +112,8 @@ add_library(sz_cpp_sdk
     src/core/SzCoreConfigManager.cpp
     src/core/SzCoreDiagnostic.cpp
     src/core/SzCoreEngine.cpp
-    src/core/SzCoreEnvironment.cpp)
+    src/core/SzCoreEnvironment.cpp
+    src/core/SzCoreLogging.cpp)
 
 add_dependencies(sz_cpp_sdk sz_codegen)
 
@@ -154,7 +162,9 @@ if(SZ_BUILD_EXAMPLES)
         sz_config_demo
         sz_configmanager_demo
         sz_diagnostic_demo
-        sz_engine_demo)
+        sz_engine_demo
+        # Native logging (SzLogging, Senzing >= 4.5.0).
+        sz_logging_demo)
     foreach(example ${SZ_EXAMPLE_PROGRAMS})
         add_executable(${example} "examples/${example}.cpp")
         target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic)
@@ -234,7 +244,7 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     # compatible with the ASan runtime (see test/sz_no_deepbind.c for the full
     # rationale). Built WITHOUT ASan (plain C, its own target) and preloaded for
     # the test executable only. Only needed when ASan is enabled.
-    if(SZ_CPP_SDK_ENABLE_ASAN)
+    if(SZ_CPP_SDK_ENABLE_ASAN AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         enable_language(C)
         add_library(sz_no_deepbind SHARED test/sz_no_deepbind.c)
         target_link_libraries(sz_no_deepbind PRIVATE ${CMAKE_DL_LIBS})
@@ -255,11 +265,20 @@ if(SZ_CPP_SDK_BUILD_TESTS)
         test/SzCoreEngineWriteTest.cpp
         test/SzCoreEngineWhyTest.cpp
         test/SzCoreEngineHowTest.cpp
-        test/SzCoreEngineGraphTest.cpp)
+        test/SzCoreEngineGraphTest.cpp
+        test/SzLoggingTest.cpp
+        test/SzCoreLoggingTest.cpp)
+    if(SZ_CPP_SDK_ENABLE_ASAN AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_sources(sz_cpp_sdk_tests PRIVATE test/sz_asan_default_options.cpp)
+    endif()
     target_compile_options(sz_cpp_sdk_tests PRIVATE -Wall -Wextra -Wpedantic)
     # test/ is on the include path so suites can pull in the shared header-only
     # repository fixture (test/sz_test_repo.hpp).
-    target_include_directories(sz_cpp_sdk_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test")
+    # src/core is also visible so SzCoreLoggingTest can drive the internal
+    # logging trampoline (src/core/sz_logging_detail.hpp) directly.
+    target_include_directories(sz_cpp_sdk_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/test"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core")
     target_link_libraries(sz_cpp_sdk_tests
         PRIVATE sz_cpp_sdk GTest::gtest GTest::gtest_main
                 nlohmann_json::nlohmann_json)
@@ -278,13 +297,9 @@ if(SZ_CPP_SDK_BUILD_TESTS)
         SZ_TEST_FLAGS_JSON="${SZ_FLAGS_JSON}")
 
     include(GoogleTest)
-    # ASAN_OPTIONS=alloc_dealloc_mismatch=0: the closed-source libSz.so internally
-    # allocates with malloc and releases through a C++ operator delete on the same
-    # buffer (the mismatch is entirely within libSz frames -- allocation and free
-    # both inside the library, not at our FFI boundary). ASan flags this as an
-    # alloc-dealloc-mismatch false positive for third-party code we cannot change.
-    # Disabling only this one check keeps full ASan coverage of OUR code (use after
-    # free, OOB, leaks all remain active).
+    # ASan options (alloc_dealloc_mismatch=0, verify_asan_link_order=0) are
+    # compiled into the test binary by test/sz_asan_default_options.cpp; see that
+    # file for why each is needed.
     #
     # The database-backed tests additionally need the RTLD_DEEPBIND interposer:
     # libSz dlopens its SQLite plugin with RTLD_DEEPBIND, which the ASan runtime
@@ -294,18 +309,25 @@ if(SZ_CPP_SDK_BUILD_TESTS)
     # allows the shim to precede the runtime in the preload list. ASan coverage of
     # our code is unaffected (the shim only edits a flag passed to dlopen).
     #
-    # ENVIRONMENT must be a single semicolon-separated CMake list value so that
-    # all entries register on the test (passing multiple quoted args makes ctest
-    # treat the 2nd as a new property name and silently drop it).
-    if(SZ_CPP_SDK_ENABLE_ASAN)
+    # ENVIRONMENT must hold exactly ONE entry: gtest_discover_tests re-splits a
+    # multi-entry ENVIRONMENT list into separate arguments, so ctest applies only
+    # the first entry and reads the rest as property names (verified: with
+    # "LD_LIBRARY_PATH=..;LD_PRELOAD=..;ASAN_OPTIONS=.." only LD_LIBRARY_PATH
+    # reached the test, so the DEEPBIND shim was never preloaded). The test binary
+    # finds libSz through its RUNPATH, so LD_LIBRARY_PATH is not needed there.
+    if(APPLE)
+        # macOS (e.g. the Homebrew senzingsdk cask, SZ_NATIVE_ROOT=
+        # /opt/homebrew/opt/senzing/er): no RTLD_DEEPBIND, so no interposer is
+        # needed under ASan; the loader path variable is DYLD_LIBRARY_PATH.
+        set(SZ_TEST_ENV "DYLD_LIBRARY_PATH=${SZ_NATIVE_ROOT}/lib")
+    elseif(SZ_CPP_SDK_ENABLE_ASAN)
         # Resolve the compiler's ASan runtime so it can be explicitly preloaded
         # after the interposer.
         execute_process(
             COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libasan.so
             OUTPUT_VARIABLE SZ_ASAN_RT
             OUTPUT_STRIP_TRAILING_WHITESPACE)
-        set(SZ_TEST_ENV
-            "LD_LIBRARY_PATH=${SZ_NATIVE_ROOT}/lib\;LD_PRELOAD=$<TARGET_FILE:sz_no_deepbind>:${SZ_ASAN_RT}\;ASAN_OPTIONS=alloc_dealloc_mismatch=0:verify_asan_link_order=0")
+        set(SZ_TEST_ENV "LD_PRELOAD=$<TARGET_FILE:sz_no_deepbind>:${SZ_ASAN_RT}")
     else()
         set(SZ_TEST_ENV "LD_LIBRARY_PATH=${SZ_NATIVE_ROOT}/lib")
     endif()

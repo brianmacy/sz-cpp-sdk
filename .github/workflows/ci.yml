@@ -3,16 +3,14 @@
 # The tests run against the REAL native Senzing engine (no mocks), so the job
 # provisions a Senzing runtime at the canonical /opt/senzing paths.
 #
-# Version: the production apt repo's current 4.x line (4.3.3). The SDK's public
-# surface mirrors the C# 4.3.0 API; the public API is byte-for-byte identical
-# between 4.3.2 and 4.4.0 (verified by diffing the installed 4.4.0 Senzing.Sdk
-# package against the 4.3.0 source -- only two additive flag-metadata types,
-# SzFlagInfo / SzFlagUsageGroupInfo, differ; no interface/method/exception
-# changes). The SDK was verified to build AND pass all tests against a real
-# 4.3.2 install, so CI tracks the stable production line rather than the
-# staging-only 4.4.x. Bump SENZING_VERSION when a newer build promotes to
-# production (flags/error tables regenerate from the installed JSON at configure
-# time, so no source change is needed for a version bump).
+# Version: Senzing 4.5.0 is the MINIMUM -- SzLogging binds libSzLogging.h, first
+# shipped in 4.5.0 (CMake fails at configure time without it). 4.5.0-26320 is in
+# the production apt repo (noble/jammy) and its senzingsdk-runtime ships
+# /opt/senzing/er/sdk/c/libSzLogging.h, /etc/opt/senzing and the codegen JSON
+# (verified by listing the .deb). The SDK's subsystem surface still mirrors the
+# C# 4.3.0 API. Bump SENZING_VERSION when a newer build promotes to production
+# (flags/error tables regenerate from the installed JSON at configure time, so
+# no source change is needed for a version bump).
 #
 # Install method & sources (verified via the Senzing MCP sdk_guide
 # topic=install, platform=linux_apt; package ownership confirmed via dpkg -S on a
@@ -41,11 +39,11 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & real-engine tests (Senzing 4.3.x)
+    name: Build & real-engine tests
     runs-on: ubuntu-latest
 
     env:
-      SENZING_VERSION: "4.3.3"
+      SENZING_VERSION: "4.5.0"
       SENZING_ACCEPT_EULA: "I_ACCEPT_THE_SENZING_EULA"
       SENZING_REPO_DEB: "senzingrepo_2.0.1-1_all.deb"
       SENZING_REPO_URL: "https://senzing-production-apt.s3.amazonaws.com"
@@ -76,18 +74,17 @@ jobs:
           # explicitly through to the package postinst -- otherwise it blocks
           # waiting for EULA acceptance and the job hangs. Pass DEBIAN_FRONTEND
           # too so debconf never prompts.
-          # senzingsdk-setup (4.3.x) Depends on senzingsdk-tools (= same
-          # version); left unpinned, apt picks the newest tools (4.4.x) and the
-          # install fails with "unmet dependencies", so pin tools too.
+          # senzingsdk-setup 4.5.0 Depends only on senzingsdk-runtime (= same
+          # version), so no senzingsdk-tools pin is needed (4.3.x required one).
           sudo SENZING_ACCEPT_EULA="${SENZING_ACCEPT_EULA}" \
                DEBIAN_FRONTEND=noninteractive \
                apt-get install -y --no-install-recommends \
             "senzingsdk-runtime=${SENZING_VERSION}-*" \
-            "senzingsdk-tools=${SENZING_VERSION}-*" \
             "senzingsdk-setup=${SENZING_VERSION}-*"
           # Fail loudly now if any path the build/tests depend on is missing.
           test -f /opt/senzing/er/lib/libSz.so
           test -d /opt/senzing/er/sdk/c
+          test -f /opt/senzing/er/sdk/c/libSzLogging.h
           test -f /opt/senzing/er/sdk/szflags.json
           test -f /opt/senzing/er/sdk/szerrors.json
           test -d /etc/opt/senzing

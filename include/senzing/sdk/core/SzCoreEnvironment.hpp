@@ -6,7 +6,9 @@
 // reference to the env-owned subsystem.
 //
 // All accessors are implemented: GetProduct, GetEngine, GetConfigManager,
-// GetDiagnostic, plus Destroy, IsDestroyed, GetActiveConfigID, and Reinitialize.
+// GetDiagnostic, GetLogging, plus Destroy, IsDestroyed, GetActiveConfigID, and
+// Reinitialize. GetLogging is the exception to the EnsureActive() rule: it
+// works before any native init and after Destroy().
 #ifndef SENZING_SDK_CORE_SZCOREENVIRONMENT_HPP
 #define SENZING_SDK_CORE_SZCOREENVIRONMENT_HPP
 
@@ -75,6 +77,10 @@ public:
     void Reinitialize(int64_t configID) override;
     void Destroy() override;
     bool IsDestroyed() override;
+    /// No liveness check: logging is process-global native state that needs no
+    /// engine initialization, and the 4.5.0 usage rule changes it after
+    /// Destroy(). Returns the process-wide SzCoreLogging instance.
+    SzLogging& GetLogging() override;
 
     // ---- Internal accessors used by owned subsystems ----
     [[nodiscard]] const std::string& GetInstanceName() const noexcept;

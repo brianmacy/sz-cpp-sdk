@@ -154,6 +154,28 @@ Redo: `Sz_processRedoRecord(redoRecord) -> long long`,
 
 `SzProduct_getLicense() -> char*` (not freed), `SzProduct_getVersion() -> char*` (not freed).
 
+## Logging (`SzLogging_*`, Senzing >= 4.5.0)
+
+Header `libSzLogging.h` (same include dir); the symbols are exported by `libSz` itself (no
+separate library). No init, no per-module last-exception state; the 4.5.0 setters return `void`.
+
+| Function | Used by |
+|---|---|
+| `void* SzLogging_registerCallbackWithFormat(SzLogCallback, void* user_data, int min_level, int format)` | `RegisterCallback` (null handle → `SzUnrecoverableException`) |
+| `void SzLogging_unregisterCallback(void* handle)` | `SzLogRegistration` destructor / `Unregister` |
+| `void* SzLogging_setDefaultCallback(SzLogCallback, void* user_data, int min_level)` | `SetDefaultCallback` (always returns null) |
+| `void SzLogging_setDefaultFormatter(int format)` | `SetDefaultFormat`; after `SetDefaultCallback` for non-Legacy |
+| `void SzLogging_setDefaultOutput(int output_type, const char* param)` | `SetDefaultOutput` (`param` = file path or null) |
+| `void SzLogging_setLogLevel(int level)` / `int SzLogging_getLogLevel()` | `SetDefaultLogLevel` / `GetEffectiveLogLevel` |
+| `void* SzLogging_registerCallback(...)` / `SzLogging_registerThreadLocalCallback(...)` | **not used** (the former is Legacy-only; the latter never delivers on 4.5.0, GDEV-4960) |
+
+`SzLogCallback` is `void(int level, const char* module, const char* message, void* user_data)`.
+Ownership: `user_data` is an SDK-owned slot (the `std::function` + an active flag), freed only after
+`SzLogging_unregisterCallback` returned outside any callback, otherwise deliberately leaked;
+`module`/`message` are native-owned, NUL-terminated UTF-8, valid only for the call (`SzLogRecord`
+borrows them). The trampoline is `noexcept` and swallows every exception. The file path is passed
+as a NUL-terminated narrow string that native copies.
+
 ## Shared
 
 `void SzHelper_free(void* pointer);` — frees `SzPointerResult.response` **string** buffers only.
