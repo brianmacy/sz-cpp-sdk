@@ -161,9 +161,19 @@ private:
 };
 
 /// Silences the default output and resets output, format and level afterwards.
+/// SetDefaultOutput does not count as user configuration (VerboseLogging still
+/// applies); SetDefaultFormat / SetDefaultLogLevel do, for the rest of the
+/// process.
 void QuietLogging() { Logging().SetDefaultOutput(SzLogOutput::Null()); }
 
+/// Set once ResetLogging() ran: native logging is user-configured for the rest
+/// of this process. CTest runs each test in its own process, so it is false at
+/// the start of every test there; it is true when the binary runs several
+/// logging tests in one process.
+bool g_userConfigured = false;
+
 void ResetLogging() {
+    g_userConfigured = true;
     try {
         Logging().SetDefaultOutput(SzLogOutput::Stderr());
         Logging().SetDefaultFormat(SzLogFormat::Legacy);
@@ -301,12 +311,12 @@ TEST_F(SzCoreLoggingTest, TestLevelFilteringAndEffectiveLevel) {
     critical.reset();
 }
 
-TEST_F(SzCoreLoggingTest, TestRegistrationSetLevelAndGetLevelAreStubbed) {
+TEST_F(SzCoreLoggingTest, TestRegistrationSetLevelAndLevelAreStubbed) {
     auto registration = Logging().RegisterCallback(SzLogLevel::Error,
                                                    [](const SzLogRecord&) {});
     ExpectRequiresNewer([&] { registration->SetLevel(SzLogLevel::Trace); },
                         "SzLogging_setCallbackLevel");
-    ExpectRequiresNewer([&] { (void)registration->GetLevel(); },
+    ExpectRequiresNewer([&] { (void)registration->Level(); },
                         "SzLogging_getCallbackLevel");
 }
 
@@ -381,9 +391,9 @@ TEST_F(SzCoreLoggingTest, TestRecordTimestampAndThreadIDAreNull) {
     auto fields = std::make_shared<Fields>();
     auto registration = Logging().RegisterCallback(
         SzLogLevel::Error, [fields](const SzLogRecord& r) {
-            fields->timestamp = r.GetTimestamp().has_value();
-            fields->timestampNs = r.GetTimestampNs().has_value();
-            fields->threadID = r.GetThreadID().has_value();
+            fields->timestamp = r.Timestamp().has_value();
+            fields->timestampNs = r.TimestampNs().has_value();
+            fields->threadID = r.ThreadID().has_value();
             ++fields->calls;
         });
     EmitError("record-fields");
@@ -476,6 +486,73 @@ TEST_F(SzCoreLoggingTest, TestDefaultOutputDirectoryPathIsBadInput) {
     }
 }
 
+TEST_F(SzCoreLoggingTest, TestDefaultOutputFileNonAsciiPath) {
+    // The path reaches native as UTF-8 (path::u8string()) on every platform.
+    const fs::path path =
+        ScratchDir() / fs::path(u8"caf\u00e9-\u65e5\u672c-\U0001F600.log");
+    fs::remove(path);
+    Logging().SetDefaultOutput(SzLogOutput::File(path));
+    Logging().SetDefaultOutput(SzLogOutput::Null());
+    EXPECT_TRUE(fs::is_regular_file(path)) << "native opened the same file";
+    fs::remove(path);
+}
+
+// ---- native status mapping (Senzing >= 4.5.1 / 4.6.0 returns) ----
+
+/// Asserts that `action` throws exactly SzException (no subclass).
+void ExpectPlainSzException(const std::function<void()>& action,
+                            const std::string& expectedText) {
+    try {
+        action();
+        ADD_FAILURE() << "expected SzException";
+    } catch (const senzing::sdk::SzBadInputException& e) {
+        ADD_FAILURE() << "SzBadInputException: " << e.what();
+    } catch (const senzing::sdk::SzConfigurationException& e) {
+        ADD_FAILURE() << "SzConfigurationException: " << e.what();
+    } catch (const senzing::sdk::SzReplaceConflictException& e) {
+        ADD_FAILURE() << "SzReplaceConflictException: " << e.what();
+    } catch (const senzing::sdk::SzRetryableException& e) {
+        ADD_FAILURE() << "SzRetryableException: " << e.what();
+    } catch (const senzing::sdk::SzUnrecoverableException& e) {
+        ADD_FAILURE() << "SzUnrecoverableException: " << e.what();
+    } catch (const SzException& e) {
+        EXPECT_NE(std::string{e.what()}.find(expectedText), std::string::npos)
+            << e.what();
+    }
+}
+
+TEST(SzCoreLoggingStatusTest, TestStatusMapping) {
+    using senzing::sdk::SzUnrecoverableException;
+    using senzing::sdk::core::detail::CheckLogStatus;
+    using senzing::sdk::core::detail::LogLevelFromNative;
+    EXPECT_NO_THROW(CheckLogStatus(0, "op"));
+    EXPECT_THROW(CheckLogStatus(-1, "op"), SzBadInputException);
+    try {
+        CheckLogStatus(-2, "SzLogging_setDefaultOutput");
+        ADD_FAILURE() << "expected SzBadInputException";
+    } catch (const SzBadInputException& e) {
+        const std::string text = e.what();
+        EXPECT_NE(text.find("could not be opened"), std::string::npos) << text;
+        EXPECT_NE(text.find("SzLogging_setDefaultOutput"), std::string::npos)
+            << text;
+    }
+    EXPECT_THROW(CheckLogStatus(-3, "op"), SzUnrecoverableException);
+    ExpectPlainSzException([] { CheckLogStatus(-9, "op"); },
+                           "op: unexpected return -9");
+    ExpectPlainSzException([] { CheckLogStatus(1, "op"); },
+                           "op: unexpected return 1");
+
+    EXPECT_EQ(LogLevelFromNative(3, "op"), SzLogLevel::Warn);
+    EXPECT_EQ(LogLevelFromNative(0, "op"), SzLogLevel::Trace);
+    EXPECT_EQ(LogLevelFromNative(6, "op"), SzLogLevel::Off);
+    EXPECT_THROW((void)LogLevelFromNative(-1, "op"), SzBadInputException);
+    EXPECT_THROW((void)LogLevelFromNative(-3, "op"), SzUnrecoverableException);
+    ExpectPlainSzException([] { (void)LogLevelFromNative(7, "op"); },
+                           "op: unexpected level 7");
+    ExpectPlainSzException([] { (void)LogLevelFromNative(-9, "op"); },
+                           "op: unexpected return -9");
+}
+
 // ---- the trampoline, driven the way native calls it ----
 
 TEST_F(SzCoreLoggingTest, TestTrampolineDeliversAndFilters) {
@@ -485,9 +562,9 @@ TEST_F(SzCoreLoggingTest, TestTrampolineDeliversAndFilters) {
     auto calls = std::make_shared<std::atomic<int>>(0);
     auto insideDuringCall = std::make_shared<std::atomic<bool>>(false);
     LogCallbackSlot slot{[calls, insideDuringCall](const SzLogRecord& r) {
-        EXPECT_EQ(r.GetLevel(), SzLogLevel::Info);
-        EXPECT_EQ(r.GetModule(), "m");
-        EXPECT_EQ(r.GetMessage(), "x");
+        EXPECT_EQ(r.Level(), SzLogLevel::Info);
+        EXPECT_EQ(r.Module(), "m");
+        EXPECT_EQ(r.Message(), "x");
         insideDuringCall->store(InsideLogCallback());
         ++*calls;
     }};
@@ -835,6 +912,77 @@ TEST_F(SzCoreLoggingEngineTest, TestConcurrentDeliveryToStableRegistration) {
     EXPECT_GT(threads.size(), 1U) << "delivered from several threads";
 }
 
+/// SetDefaultLogLevel before the first initialization is user configuration:
+/// every later component initialization keeps it, even with
+/// VerboseLogging(true) (which would otherwise apply TRACE).
+TEST_F(SzCoreLoggingEngineTest, TestDefaultLevelSetBeforeInitSurvivesInit) {
+    Logging().SetDefaultLogLevel(SzLogLevel::Warn);
+    senzing::sdk::test::BootstrapDefaultConfig(settings_, {"TEST"});
+    EXPECT_EQ(Logging().GetEffectiveLogLevel(), SzLogLevel::Warn)
+        << "kept through the config manager's init (VerboseLogging(false))";
+    auto env = SzCoreEnvironment::NewBuilder()
+                   .InstanceName("sz-cpp-logging-user-level")
+                   .Settings(settings_)
+                   .VerboseLogging(true)
+                   .Build();
+    (void)env->GetEngine();
+    EXPECT_EQ(Logging().GetEffectiveLogLevel(), SzLogLevel::Warn)
+        << "kept through Sz_init with VerboseLogging(true)";
+    env->Destroy();
+    EXPECT_EQ(Logging().GetEffectiveLogLevel(), SzLogLevel::Warn);
+}
+
+/// Without user configuration, each component initialization applies the
+/// environment's VerboseLogging to the default output: ERROR for false, TRACE
+/// for true. Needs a process in which nothing configured logging yet.
+TEST_F(SzCoreLoggingEngineTest, TestVerboseLoggingAppliesWithoutUserConfig) {
+    if (g_userConfigured) {
+        GTEST_SKIP() << "needs a fresh process (CTest runs each test in its "
+                        "own); an earlier test configured logging";
+    }
+    senzing::sdk::test::BootstrapDefaultConfig(settings_, {"TEST"});
+    EXPECT_EQ(Logging().GetEffectiveLogLevel(), SzLogLevel::Error)
+        << "VerboseLogging(false) init";
+    auto env = SzCoreEnvironment::NewBuilder()
+                   .InstanceName("sz-cpp-logging-verbose")
+                   .Settings(settings_)
+                   .VerboseLogging(true)
+                   .Build();
+    (void)env->GetEngine();
+    EXPECT_EQ(Logging().GetEffectiveLogLevel(), SzLogLevel::Trace)
+        << "VerboseLogging(true) init with no user configuration";
+    env->Destroy();
+}
+
+/// Registrations survive Reinitialize() (SzEnvironment::GetLogging docs).
+TEST_F(SzCoreLoggingEngineTest, TestRegistrationSurvivesReinitialize) {
+    auto collector = std::make_shared<Collector>();
+    auto registration =
+        Logging().RegisterCallback(SzLogLevel::Trace, Into(collector));
+    const int64_t first =
+        senzing::sdk::test::BootstrapDefaultConfig(settings_, {"TEST"});
+    const int64_t second = senzing::sdk::test::BootstrapDefaultConfig(
+        settings_, {"TEST", "OTHER"}, "Second Config");
+    auto env = NewEnvironment("sz-cpp-logging-reinit");
+    SzEngine& engine = env->GetEngine();
+    EXPECT_EQ(env->GetActiveConfigID(), second);
+    (void)collector->Take();
+
+    env->Reinitialize(first);
+    EXPECT_EQ(env->GetActiveConfigID(), first);
+    EXPECT_EQ(Logging().GetEffectiveLogLevel(), SzLogLevel::Trace)
+        << "the TRACE registration is still in native's sink list";
+    engine.AddRecord("TEST", "REINIT_1",
+                     R"({"NAME_FULL": "Robert Smith", "PHONE_NUMBER": "555"})");
+    const auto afterReinit = collector->Take();
+    env->Destroy();
+    registration.reset();  // after Destroy: nothing else logs
+
+    std::cerr << "captured " << afterReinit.size()
+              << " records after Reinitialize()\n";
+    EXPECT_FALSE(afterReinit.empty()) << "still delivered after Reinitialize()";
+}
+
 // ---- need Senzing >= 4.5.1 / 4.6.0 (GDEV-4960): final-shape tests ----
 
 TEST_F(SzCoreLoggingTest, DISABLED_TestThreadLocalScope) {
@@ -912,9 +1060,9 @@ TEST_F(SzCoreLoggingTest, DISABLED_TestRecordTimestampIsUtcNowAndMatchesJsonl) {
     auto registration = Logging().RegisterCallback(
         SzLogCallbackOptions(SzLogLevel::Error).WithFormat(SzLogFormat::Jsonl),
         [seen](const SzLogRecord& r) {
-            seen->timestamp = r.GetTimestamp();
-            seen->threadID = r.GetThreadID();
-            seen->message = std::string{r.GetMessage()};
+            seen->timestamp = r.Timestamp();
+            seen->threadID = r.ThreadID();
+            seen->message = std::string{r.Message()};
         });
     const auto before = std::chrono::system_clock::now();
     EmitError("record-time");

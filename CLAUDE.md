@@ -224,6 +224,14 @@ LD_LIBRARY_PATH=/opt/senzing/er/lib ctest --test-dir build -R <TestName>        
 - **Naming: strictly identical to C#** — PascalCase types (`SzEngine`) AND PascalCase methods
   (`engine.AddRecord(...)`), PascalCase flag/enum/exception constants, `camelCase` parameter names
   matching C#. (Chosen over snake_case for 1:1 fidelity.) Names are never adapted for C++ idiom.
+- **C# properties → property-style accessors**: a C# property maps to a `const` accessor with the
+  property's name and no `Get` prefix (`SzException::ErrorCode()`, `SzLogRecord::Level()` /
+  `Message()`, `SzLogOutput::Path()`); C# methods keep their method names (`GetEngine`,
+  `GetDefaultOutput`, `SetLevel`). This also keeps public names clear of Win32 macros such as
+  `GetMessage`. Docs/examples use qualified names or block/namespace-scope using-declarations,
+  never `using namespace senzing::sdk;` nor global-scope using-declarations (the native
+  `libSzLogging.h` declares global `SzLogLevel`, `SzLogFormat`, `SzLogOutputType` and, from 4.6.0,
+  `SzLogRecord`, so those would be ambiguous in code that includes both).
 - **Types: native C++ allowed, contract preserved** — substitute the natural C++ type for a C# one
   (`std::string`/`std::string_view`, `int64_t`, `std::optional`, STL containers, lazy views) when it
   improves the implementation, as long as the method's name, parameter order, and call

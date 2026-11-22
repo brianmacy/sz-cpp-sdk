@@ -5,7 +5,8 @@
 // Not part of the public API (src/core is a PRIVATE include directory). Exposed
 // only so the test suite can drive the trampoline the way native does, covering
 // the defensive paths native never takes (null arguments, out-of-range or OFF
-// levels, a deactivated slot) -- mirroring the Rust SDK's in-module unit tests.
+// levels, a deactivated slot), and the native status mapping with the returns
+// 4.5.0 never produces -- mirroring the Rust SDK's in-module unit tests.
 #ifndef SENZING_SDK_CORE_SZ_LOGGING_DETAIL_HPP
 #define SENZING_SDK_CORE_SZ_LOGGING_DETAIL_HPP
 
@@ -35,6 +36,25 @@ void OnLogCallback(int level, const char* moduleName, const char* message,
 
 /// True while this thread runs a callback registered through this SDK.
 bool InsideLogCallback() noexcept;
+
+/// Throws the error for a non-zero libSzLogging status or negative getter
+/// return (`operation` names the native function). Port of the Rust SDK's
+/// status_error:
+///   -1    invalid argument                        -> SzBadInputException
+///   -2    output could not be opened (kept)       -> SzBadInputException
+///   -3    refused: process exit in progress       -> SzUnrecoverableException
+///   other not documented                          -> SzException
+[[noreturn]] void ThrowLogStatusError(int status, const char* operation);
+
+/// Returns for 0 (ok); any other status throws via ThrowLogStatusError. For the
+/// `int` setter returns of Senzing >= 4.5.1 / 4.6.0 (the 4.5.0 setters return
+/// `void`, so nothing calls it yet). Port of the Rust SDK's check_status.
+void CheckLogStatus(int status, const char* operation);
+
+/// A native level getter's return as SzLogLevel: a negative value throws via
+/// ThrowLogStatusError, a non-negative value outside SzLogLevel throws
+/// SzException. Port of the Rust SDK's level_from_native.
+SzLogLevel LogLevelFromNative(int value, const char* operation);
 
 }  // namespace senzing::sdk::core::detail
 

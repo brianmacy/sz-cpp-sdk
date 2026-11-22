@@ -113,8 +113,9 @@ See [`examples/README.md`](examples/README.md) for the full local-repo setup
 #include "senzing/sdk/core/SzCoreEnvironment.hpp"
 
 int main() {
-    using namespace senzing::sdk;
-    auto env = core::SzCoreEnvironment::NewBuilder()
+    using senzing::sdk::SzException;
+    using senzing::sdk::core::SzCoreEnvironment;
+    auto env = SzCoreEnvironment::NewBuilder()
                    .InstanceName("my-app")
                    .Settings(std::getenv("SENZING_ENGINE_CONFIGURATION_JSON"))
                    .VerboseLogging(false)
@@ -188,20 +189,39 @@ the Rust SDK v4.5.0 and the names are its C#-style spelling (see
 [`docs/csharp-sdk-api.md`](docs/csharp-sdk-api.md#szlogging--this-api-leads-c-no-c-equivalent-yet)).
 
 ```cpp
-using namespace senzing::sdk;
-SzLogging& logging = env->GetLogging();          // no native init; valid after Destroy()
-logging.SetDefaultOutput(SzLogOutput::Null());   // the callback is the only sink
-auto registration = logging.RegisterCallback(    // RAII: destroying it unregisters
-    SzLogLevel::Info,                            // options default to the Bare format
-    [](const SzLogRecord& r) {                   // may run concurrently on many threads
-        std::cerr << r.GetLevel() << " " << r.GetModule() << ": " << r.GetMessage() << "\n";
+// Inside a function (or your own namespace): using-declarations, not
+// `using namespace senzing::sdk;`. The native C header libSzLogging.h declares
+// global SzLogLevel / SzLogFormat / SzLogOutputType (and, from Senzing 4.6.0,
+// SzLogRecord); in code that includes both, a using-directive (or a
+// using-declaration at global scope) makes those names ambiguous.
+using senzing::sdk::SzLogging;
+using senzing::sdk::SzLogLevel;
+using senzing::sdk::SzLogOutput;
+using senzing::sdk::SzLogRecord;
+using senzing::sdk::SzLogRegistration;
+
+std::unique_ptr<SzLogRegistration> registration;  // declared BEFORE env: destroyed after it
+auto env = senzing::sdk::core::SzCoreEnvironment::NewBuilder()/* ... */.Build();
+SzLogging& logging = env->GetLogging();           // no native init; valid after Destroy()
+logging.SetDefaultOutput(SzLogOutput::Null());    // the callback is the only sink
+registration = logging.RegisterCallback(          // RAII: destroying it unregisters
+    SzLogLevel::Info,                             // options default to the Bare format
+    [](const SzLogRecord& r) {                    // may run concurrently on many threads
+        std::cerr << r.Level() << " " << r.Module() << ": " << r << "\n";  // << r: the message
     });
-SzEngine& engine = env->GetEngine();             // initialization messages are captured
+auto& engine = env->GetEngine();                  // initialization messages are captured
 // ... use the engine; SetDefaultLogLevel(...) is safe at any time ...
 env->Destroy();
-registration.reset();                            // after Destroy: nothing else is logging
+registration.reset();                             // after Destroy: nothing else is logging
 logging.SetDefaultOutput(SzLogOutput::Stderr());
 ```
+
+`SzLogRecord`, `SzLogOutput`, `SzLogCallbackOptions` and `SzLogRegistration`
+expose property-style accessors named like the C# properties they will become
+(`Level()`, `Module()`, `ThreadHash()`, `Message()`, `Timestamp()`, `ThreadID()`,
+`OutputType()`, `Path()`, `IsAppend()`, `MinLevel()`, `Format()`), as
+`SzException::ErrorCode()` does; `SzLogging`'s own `Get*`/`Set*` methods stay
+methods.
 
 - **All state is native.** Each registration is its own native registration;
   the SDK keeps no registry, dispatcher or formatter.
@@ -219,11 +239,20 @@ logging.SetDefaultOutput(SzLogOutput::Stderr());
   it cannot be opened. 4.5.0 flushes it only when the output is replaced or at
   exit (not at `Destroy()`); `SetDefaultOutput` resets the default format to
   Legacy, so set the format afterwards.
+- **Registration lifetime**: destroy a registration only before the first
+  engine initialization or after `Destroy()` — declare it before the
+  environment (scope exit then destroys the environment first) or call
+  `Destroy()` explicitly. Registrations survive `Reinitialize()`.
 - **Leaks by design on 4.5.0**: a replaced default callback, and a registration
-  destroyed from inside a callback, are leaked (no native release hook yet).
+  destroyed from inside a callback, are leaked (no native release hook yet). A
+  registration leaked inside a callback also stays in native's sink list for
+  the rest of the process, keeping the effective level lowered to its level.
+- **Errors**: a negative native level/status maps like the Rust SDK: `-1`/`-2`
+  → `SzBadInputException`, `-3` (process exit in progress) →
+  `SzUnrecoverableException`, anything else → `SzException`.
 - **Needs Senzing >= 4.5.1 / 4.6.0** (final signatures present; throw
   `SzConfigurationException` naming the native function until then):
-  `SzLogRegistration::SetLevel` / `GetLevel`, `GetDefaultOutput` /
+  `SzLogRegistration::SetLevel` / `Level`, `GetDefaultOutput` /
   `GetDefaultFormat` / `GetDefaultLogLevel`, `SzLogOutput::AppendFile`,
   `RegisterThreadLocalCallback` / `CaptureThreadLogs`, sink changes from inside a
   callback; `SzLogRecord` timestamp / thread ID are `std::nullopt`.

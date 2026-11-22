@@ -8,6 +8,7 @@
 // SzCoreLoggingTest.cpp.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -37,7 +38,7 @@ using senzing::sdk::SzLogRecord;
 using senzing::sdk::ToString;
 
 template <class T>
-std::string Streamed(T value) {
+std::string Streamed(const T& value) {
     std::ostringstream os;
     os << value;
     return os.str();
@@ -51,9 +52,8 @@ TEST(SzLoggingTest, TestLevelValuesAndRoundTrips) {
             << "native SZ_LOG_LEVEL_* value";
         EXPECT_EQ(ParseSzLogLevel(ToString(level)), level);
         std::string lower{ToString(level)};
-        for (char& c : lower) {
-            c = static_cast<char>(c - 'A' + 'a');
-        }
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](char c) { return static_cast<char>(c - 'A' + 'a'); });
         EXPECT_EQ(ParseSzLogLevel(lower), level);
         EXPECT_EQ(Streamed(level), ToString(level));
     }
@@ -98,23 +98,22 @@ TEST(SzLoggingTest, TestFormatValuesAndRoundTrips) {
 
 TEST(SzLoggingTest, TestOutputFactories) {
     const SzLogOutput defaulted;
-    EXPECT_EQ(defaulted.GetOutputType(), SzLogOutputType::Stderr);
+    EXPECT_EQ(defaulted.OutputType(), SzLogOutputType::Stderr);
     EXPECT_EQ(defaulted, SzLogOutput::Stderr());
-    EXPECT_TRUE(defaulted.GetPath().empty());
+    EXPECT_TRUE(defaulted.Path().empty());
     EXPECT_FALSE(defaulted.IsAppend());
 
-    EXPECT_EQ(SzLogOutput::Stdout().GetOutputType(), SzLogOutputType::Stdout);
-    EXPECT_EQ(SzLogOutput::Null().GetOutputType(), SzLogOutputType::Null);
-    EXPECT_EQ(SzLogOutput::Callback().GetOutputType(),
-              SzLogOutputType::Callback);
+    EXPECT_EQ(SzLogOutput::Stdout().OutputType(), SzLogOutputType::Stdout);
+    EXPECT_EQ(SzLogOutput::Null().OutputType(), SzLogOutputType::Null);
+    EXPECT_EQ(SzLogOutput::Callback().OutputType(), SzLogOutputType::Callback);
 
     const SzLogOutput truncate = SzLogOutput::File("a.log");
-    EXPECT_EQ(truncate.GetOutputType(), SzLogOutputType::File);
-    EXPECT_EQ(truncate.GetPath(), "a.log");
+    EXPECT_EQ(truncate.OutputType(), SzLogOutputType::File);
+    EXPECT_EQ(truncate.Path(), "a.log");
     EXPECT_FALSE(truncate.IsAppend());
 
     const SzLogOutput append = SzLogOutput::AppendFile("a.log");
-    EXPECT_EQ(append.GetOutputType(), SzLogOutputType::File);
+    EXPECT_EQ(append.OutputType(), SzLogOutputType::File);
     EXPECT_TRUE(append.IsAppend());
     EXPECT_NE(truncate, append);
     EXPECT_EQ(truncate, SzLogOutput::File("a.log"));
@@ -123,17 +122,17 @@ TEST(SzLoggingTest, TestOutputFactories) {
 
 TEST(SzLoggingTest, TestCallbackOptions) {
     const SzLogCallbackOptions fromLevel = SzLogLevel::Debug;  // implicit
-    EXPECT_EQ(fromLevel.GetMinLevel(), SzLogLevel::Debug);
-    EXPECT_EQ(fromLevel.GetFormat(), SzLogFormat::Bare) << "Bare by default";
+    EXPECT_EQ(fromLevel.MinLevel(), SzLogLevel::Debug);
+    EXPECT_EQ(fromLevel.Format(), SzLogFormat::Bare) << "Bare by default";
 
     const auto jsonl = fromLevel.WithFormat(SzLogFormat::Jsonl);
-    EXPECT_EQ(jsonl.GetFormat(), SzLogFormat::Jsonl);
-    EXPECT_EQ(jsonl.GetMinLevel(), SzLogLevel::Debug);
-    EXPECT_EQ(fromLevel.GetFormat(), SzLogFormat::Bare) << "copy, not mutate";
+    EXPECT_EQ(jsonl.Format(), SzLogFormat::Jsonl);
+    EXPECT_EQ(jsonl.MinLevel(), SzLogLevel::Debug);
+    EXPECT_EQ(fromLevel.Format(), SzLogFormat::Bare) << "copy, not mutate";
 
     constexpr SzLogCallbackOptions explicitOptions{SzLogLevel::Warn,
                                                    SzLogFormat::Legacy};
-    static_assert(explicitOptions.GetMinLevel() == SzLogLevel::Warn);
+    static_assert(explicitOptions.MinLevel() == SzLogLevel::Warn);
     EXPECT_EQ(
         explicitOptions,
         SzLogCallbackOptions(SzLogLevel::Warn).WithFormat(SzLogFormat::Legacy));
@@ -143,44 +142,44 @@ TEST(SzLoggingTest, TestCallbackOptions) {
 TEST(SzLoggingTest, TestRecordParsing) {
     const SzLogRecord rec{SzLogLevel::Info, "szstatic:82eb15f5faba9bab",
                           "hello", std::nullopt, 42};
-    EXPECT_EQ(rec.GetLevel(), SzLogLevel::Info);
-    EXPECT_EQ(rec.GetModule(), "szstatic");
-    ASSERT_TRUE(rec.GetThreadHash().has_value());
-    EXPECT_EQ(*rec.GetThreadHash(), "82eb15f5faba9bab");
-    EXPECT_EQ(rec.GetMessage(), "hello");
-    EXPECT_EQ(rec.GetRawModule(), "szstatic:82eb15f5faba9bab");
-    EXPECT_EQ(rec.GetThreadID(), std::optional<uint64_t>{42});
+    EXPECT_EQ(rec.Level(), SzLogLevel::Info);
+    EXPECT_EQ(rec.Module(), "szstatic");
+    ASSERT_TRUE(rec.ThreadHash().has_value());
+    EXPECT_EQ(*rec.ThreadHash(), "82eb15f5faba9bab");
+    EXPECT_EQ(rec.Message(), "hello");
+    EXPECT_EQ(rec.RawModule(), "szstatic:82eb15f5faba9bab");
+    EXPECT_EQ(rec.ThreadID(), std::optional<uint64_t>{42});
 
     const SzLogRecord nested{SzLogLevel::Info, "a:b:c", "m"};
-    EXPECT_EQ(nested.GetModule(), "a:b");
-    EXPECT_EQ(nested.GetThreadHash(), std::optional<std::string_view>{"c"});
+    EXPECT_EQ(nested.Module(), "a:b");
+    EXPECT_EQ(nested.ThreadHash(), std::optional<std::string_view>{"c"});
 
     const SzLogRecord plain{SzLogLevel::Info, "plain", "m"};
-    EXPECT_EQ(plain.GetModule(), "plain");
-    EXPECT_FALSE(plain.GetThreadHash().has_value());
+    EXPECT_EQ(plain.Module(), "plain");
+    EXPECT_FALSE(plain.ThreadHash().has_value());
 
     const SzLogRecord trailing{SzLogLevel::Info, "mod:", "m"};
-    EXPECT_EQ(trailing.GetModule(), "mod");
-    EXPECT_EQ(trailing.GetThreadHash(), std::optional<std::string_view>{""});
+    EXPECT_EQ(trailing.Module(), "mod");
+    EXPECT_EQ(trailing.ThreadHash(), std::optional<std::string_view>{""});
 }
 
 TEST(SzLoggingTest, TestRecordTimestamp) {
     const SzLogRecord none{SzLogLevel::Info, "m:h", "x"};
-    EXPECT_FALSE(none.GetTimestamp().has_value());
-    EXPECT_FALSE(none.GetTimestampNs().has_value());
-    EXPECT_FALSE(none.GetThreadID().has_value());
+    EXPECT_FALSE(none.Timestamp().has_value());
+    EXPECT_FALSE(none.TimestampNs().has_value());
+    EXPECT_FALSE(none.ThreadID().has_value());
 
     // A multiple of 1 us so every system_clock precision represents it exactly.
     constexpr int64_t kNs = 1'763'568'000'123'456'000;
     const SzLogRecord rec{SzLogLevel::Info, "m:h", "x", kNs};
-    EXPECT_EQ(rec.GetTimestampNs(), std::optional<int64_t>{kNs});
-    const auto since = rec.GetTimestamp()->time_since_epoch();
+    EXPECT_EQ(rec.TimestampNs(), std::optional<int64_t>{kNs});
+    const auto since = rec.Timestamp()->time_since_epoch();
     EXPECT_EQ(
         std::chrono::duration_cast<std::chrono::nanoseconds>(since).count(),
         kNs);
 
     const SzLogRecord before{SzLogLevel::Info, "m:h", "x", -1'000'000'000};
-    EXPECT_EQ(std::chrono::system_clock::time_point{} - *before.GetTimestamp(),
+    EXPECT_EQ(std::chrono::system_clock::time_point{} - *before.Timestamp(),
               std::chrono::seconds{1});
 }
 
@@ -192,7 +191,7 @@ TEST(SzLoggingTest, TestEntryCopy) {
     {
         const SzLogRecord rec{SzLogLevel::Warn, rawModule, message, kNs, 42};
         entry = rec.ToEntry();
-        EXPECT_EQ(entry.Timestamp, rec.GetTimestamp());
+        EXPECT_EQ(entry.Timestamp, rec.Timestamp());
     }
     EXPECT_EQ(entry.Level, SzLogLevel::Warn);
     EXPECT_EQ(entry.Module, "szdb");
@@ -205,6 +204,13 @@ TEST(SzLoggingTest, TestEntryCopy) {
     EXPECT_FALSE(noHash.ThreadHash.has_value());
     EXPECT_FALSE(noHash.Timestamp.has_value());
     EXPECT_NE(noHash, entry);
+}
+
+TEST(SzLoggingTest, TestRecordAndEntryStreamTheMessage) {
+    const SzLogRecord rec{SzLogLevel::Warn, "szdb:abc", "disk is slow"};
+    EXPECT_EQ(Streamed(rec), "disk is slow") << "like Rust's Display";
+    EXPECT_EQ(Streamed(rec.ToEntry()), "disk is slow");
+    EXPECT_EQ(Streamed(SzLogEntry{}), "");
 }
 
 TEST(SzLoggingTest, TestCaptureFinishDrainsBuffer) {

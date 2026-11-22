@@ -34,12 +34,12 @@ public:
     void SetDefaultCallback(const SzLogCallbackOptions& options,
                             SzLogCallback callback) override;
     void SetDefaultOutput(const SzLogOutput& output) override;
-    SzLogOutput GetDefaultOutput() override;
+    [[nodiscard]] SzLogOutput GetDefaultOutput() override;
     void SetDefaultFormat(SzLogFormat format) override;
-    SzLogFormat GetDefaultFormat() override;
+    [[nodiscard]] SzLogFormat GetDefaultFormat() override;
     void SetDefaultLogLevel(SzLogLevel level) override;
-    SzLogLevel GetDefaultLogLevel() override;
-    SzLogLevel GetEffectiveLogLevel() override;
+    [[nodiscard]] SzLogLevel GetDefaultLogLevel() override;
+    [[nodiscard]] SzLogLevel GetEffectiveLogLevel() override;
 
 private:
     SzCoreLogging() = default;
