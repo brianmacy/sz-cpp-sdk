@@ -54,7 +54,12 @@ int main() {
     using senzing::sdk::SzLogLevel;
     using senzing::sdk::SzLogOutput;
     using senzing::sdk::SzLogRecord;
+    using senzing::sdk::SzLogRegistration;
 
+    // Declared BEFORE the environment: locals are destroyed in reverse order,
+    // so even on an exception the environment is destroyed (Destroy()) before
+    // the registration -- never unregister while the engine may be logging.
+    std::unique_ptr<SzLogRegistration> registration;
     try {
         auto guard =
             senzing::sdk::examples::BuildEnvironment("sz_logging_demo");
@@ -64,17 +69,17 @@ int main() {
 
         // (1)+(2) Before the first GetEngine(): register, silence stderr.
         auto stats = std::make_shared<LogStats>();
-        auto registration = logging.RegisterCallback(
+        registration = logging.RegisterCallback(
             SzLogCallbackOptions(SzLogLevel::Trace)
                 .WithFormat(SzLogFormat::Bare),
             [stats](const SzLogRecord& record) {
                 std::lock_guard<std::mutex> lock(stats->mutex);
-                ++stats->byLevel[record.GetLevel()];
-                ++stats->byModule[std::string{record.GetModule()}];
+                ++stats->byLevel[record.Level()];
+                ++stats->byModule[std::string{record.Module()}];
                 if (stats->kept < 3) {
                     stats->firstMessages +=
-                        "  [" + std::string{ToString(record.GetLevel())} +
-                        "] " + std::string{record.GetMessage()} + "\n";
+                        "  [" + std::string{ToString(record.Level())} + "] " +
+                        std::string{record.Message()} + "\n";
                     ++stats->kept;
                 }
             });

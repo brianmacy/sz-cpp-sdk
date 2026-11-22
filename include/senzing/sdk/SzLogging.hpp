@@ -22,13 +22,13 @@
 //   has its final signature here but throws SzConfigurationException naming the
 //   native function and "Senzing >= 4.5.1/4.6.0" (or returns std::nullopt for
 //   the SzLogRecord fields): per-callback levels (SzLogRegistration::SetLevel /
-//   GetLevel), the default-state getters (GetDefaultOutput / GetDefaultFormat /
+//   Level), the default-state getters (GetDefaultOutput / GetDefaultFormat /
 //   GetDefaultLogLevel), append mode (SzLogOutput::AppendFile), thread-local
 //   registrations (RegisterThreadLocalCallback, CaptureThreadLogs; 4.5.0 never
 //   delivers to them, GDEV-4960), status-code error reporting, the record's
 //   timestamp and thread ID, and changing sinks from inside a callback. Each
 //   stub is marked SZ-FUTURE in src/core/SzCoreLogging.cpp. There is no runtime
-//   version detection. On 4.5.0, SzLogRecord::GetThreadHash() is the per-thread
+//   version detection. On 4.5.0, SzLogRecord::ThreadHash() is the per-thread
 //   handle (it is in every record's module).
 //
 // THE SENZING 4.5.0 USAGE RULE (documented, not enforced)
@@ -74,12 +74,31 @@
 //   - Destroying a registration OUTSIDE any callback unregisters it and then
 //     destroys the std::function (and everything it captured) before the
 //     destructor returns. On 4.5.0 the usage rule guarantees no invocation is
-//     in flight.
+//     in flight -- provided the registration is destroyed before the first
+//     engine initialization or after Destroy().
+//   - Mind the scope-exit order: locals are destroyed in reverse order of
+//     declaration, so a registration declared AFTER the environment is
+//     destroyed FIRST, while the engine is still initialized and may be logging
+//     on its own threads (on 4.5.0: a use-after-free). Declare the registration
+//     variable BEFORE the environment (assign it after GetLogging()), or call
+//     SzEnvironment::Destroy() explicitly before the registration goes out of
+//     scope:
+//
+//       std::unique_ptr<senzing::sdk::SzLogRegistration> registration;
+//       auto env = SzCoreEnvironment::NewBuilder()...Build();
+//       registration = env->GetLogging().RegisterCallback(...);
+//       // scope exit: env is destroyed (Destroy()) before registration
+//
 //   - Destroying a registration INSIDE a callback (its own or another's)
 //     deactivates it at once, so it is not called again, but leaves the native
 //     registration in place and LEAKS the std::function: on 4.5.0 unregistering
-//     there would rebuild the sink list native is iterating. Once the native
-//     release hook ships, native frees it after its last invocation instead.
+//     there would rebuild the sink list native is iterating. The leaked native
+//     registration stays in native's sink list for the REST OF THE PROCESS: it
+//     keeps the effective level (GetEffectiveLogLevel) lowered to its minimum
+//     level, and native keeps formatting every message at or above that level
+//     for it (the SDK then drops them), a lasting cost at TRACE/DEBUG. Once the
+//     native release hook ships, native frees it after its last invocation
+//     instead.
 //   - "Inside a callback" means inside a callback registered through THIS SDK.
 //   - A default callback (SetDefaultCallback) is LEAKED when it is replaced:
 //     4.5.0 has no release hook, and freeing it would require the SDK to track
@@ -321,12 +340,10 @@ public:
     }
 
     /// The kind of destination.
-    [[nodiscard]] SzLogOutputType GetOutputType() const noexcept {
-        return type_;
-    }
+    [[nodiscard]] SzLogOutputType OutputType() const noexcept { return type_; }
 
-    /// The file path (empty unless GetOutputType() is File).
-    [[nodiscard]] const std::filesystem::path& GetPath() const noexcept {
+    /// The file path (empty unless OutputType() is File).
+    [[nodiscard]] const std::filesystem::path& Path() const noexcept {
         return path_;
     }
 
@@ -350,7 +367,7 @@ private:
 // ============================================================================
 
 /// Registration parameters: the callback's minimum level and the format native
-/// applies to SzLogRecord::GetMessage().
+/// applies to SzLogRecord::Message().
 ///
 /// Implicitly constructible from an SzLogLevel, so
 /// `logging.RegisterCallback(SzLogLevel::Info, ...)` works. The default format
@@ -376,12 +393,12 @@ public:
     }
 
     /// Minimum level delivered to the callback.
-    [[nodiscard]] constexpr SzLogLevel GetMinLevel() const noexcept {
+    [[nodiscard]] constexpr SzLogLevel MinLevel() const noexcept {
         return minLevel_;
     }
 
     /// Format native applies to the message.
-    [[nodiscard]] constexpr SzLogFormat GetFormat() const noexcept {
+    [[nodiscard]] constexpr SzLogFormat Format() const noexcept {
         return format_;
     }
 
@@ -401,9 +418,9 @@ private:
 struct SzLogEntry {
     /// The message's severity.
     SzLogLevel Level{SzLogLevel::Info};
-    /// The module name (SzLogRecord::GetModule()).
+    /// The module name (SzLogRecord::Module()).
     std::string Module;
-    /// The thread hash (SzLogRecord::GetThreadHash()).
+    /// The thread hash (SzLogRecord::ThreadHash()).
     std::optional<std::string> ThreadHash;
     /// The message as native formatted it.
     std::string Message;
@@ -417,11 +434,20 @@ struct SzLogEntry {
     bool operator==(const SzLogEntry& other) const = default;
 };
 
+/// Writes entry.Message (the message as native formatted it).
+inline std::ostream& operator<<(std::ostream& os, const SzLogEntry& entry) {
+    return os << entry.Message;
+}
+
 /// One log message, borrowed from native for the duration of a callback.
 ///
 /// The string_views point at native memory that is valid ONLY during the
 /// callback; use ToEntry() to keep an owned copy. Strings are passed through as
 /// native's bytes (UTF-8 as native produced them; never re-encoded).
+///
+/// The accessors are named like the C# properties they will become (Level(),
+/// Message(), ...), as SzException::ErrorCode() is; this also keeps clear of
+/// the Win32 GetMessage macro.
 class SzLogRecord {
 public:
     /// Builds a record over native's fields. `rawModule` is native's module
@@ -437,13 +463,11 @@ public:
           threadID_(threadID) {}
 
     /// The message's severity.
-    [[nodiscard]] constexpr SzLogLevel GetLevel() const noexcept {
-        return level_;
-    }
+    [[nodiscard]] constexpr SzLogLevel Level() const noexcept { return level_; }
 
     /// The module name: native's module up to its last ':' (for
     /// "szstatic:82eb15f5faba9bab", "szstatic").
-    [[nodiscard]] constexpr std::string_view GetModule() const noexcept {
+    [[nodiscard]] constexpr std::string_view Module() const noexcept {
         const auto colon = rawModule_.rfind(':');
         return colon == std::string_view::npos ? rawModule_
                                                : rawModule_.substr(0, colon);
@@ -452,7 +476,7 @@ public:
     /// The thread hash after the last ':' of native's module
     /// ("82eb15f5faba9bab"), if present. The per-thread handle on Senzing
     /// 4.5.0: records from one thread share it.
-    [[nodiscard]] constexpr std::optional<std::string_view> GetThreadHash()
+    [[nodiscard]] constexpr std::optional<std::string_view> ThreadHash()
         const noexcept {
         const auto colon = rawModule_.rfind(':');
         if (colon == std::string_view::npos) {
@@ -462,18 +486,18 @@ public:
     }
 
     /// The message exactly as native formatted it for this registration.
-    [[nodiscard]] constexpr std::string_view GetMessage() const noexcept {
+    [[nodiscard]] constexpr std::string_view Message() const noexcept {
         return message_;
     }
 
     /// Native's module string, unparsed ("szstatic:82eb15f5faba9bab").
-    [[nodiscard]] constexpr std::string_view GetRawModule() const noexcept {
+    [[nodiscard]] constexpr std::string_view RawModule() const noexcept {
         return rawModule_;
     }
 
     /// When native logged the message: UTC nanoseconds since the Unix epoch.
     /// std::nullopt until Senzing >= 4.5.1 / 4.6.0.
-    [[nodiscard]] constexpr std::optional<int64_t> GetTimestampNs()
+    [[nodiscard]] constexpr std::optional<int64_t> TimestampNs()
         const noexcept {
         return timestampNs_;
     }
@@ -481,7 +505,7 @@ public:
     /// When native logged the message (UTC), at the platform's
     /// system_clock precision. std::nullopt until Senzing >= 4.5.1 / 4.6.0.
     [[nodiscard]] std::optional<std::chrono::system_clock::time_point>
-    GetTimestamp() const {
+    Timestamp() const {
         if (!timestampNs_) {
             return std::nullopt;
         }
@@ -491,9 +515,8 @@ public:
     }
 
     /// OS id of the thread that logged the message. std::nullopt until Senzing
-    /// >= 4.5.1 / 4.6.0; use GetThreadHash() on 4.5.0.
-    [[nodiscard]] constexpr std::optional<uint64_t> GetThreadID()
-        const noexcept {
+    /// >= 4.5.1 / 4.6.0; use ThreadHash() on 4.5.0.
+    [[nodiscard]] constexpr std::optional<uint64_t> ThreadID() const noexcept {
         return threadID_;
     }
 
@@ -501,12 +524,12 @@ public:
     [[nodiscard]] SzLogEntry ToEntry() const {
         SzLogEntry entry;
         entry.Level = level_;
-        entry.Module = std::string{GetModule()};
-        if (const auto hash = GetThreadHash()) {
+        entry.Module = std::string{Module()};
+        if (const auto hash = ThreadHash()) {
             entry.ThreadHash = std::string{*hash};
         }
         entry.Message = std::string{message_};
-        entry.Timestamp = GetTimestamp();
+        entry.Timestamp = Timestamp();
         entry.ThreadID = threadID_;
         return entry;
     }
@@ -518,6 +541,11 @@ private:
     std::optional<int64_t> timestampNs_;
     std::optional<uint64_t> threadID_;
 };
+
+/// Writes record.Message() (the message as native formatted it).
+inline std::ostream& operator<<(std::ostream& os, const SzLogRecord& record) {
+    return os << record.Message();
+}
 
 /// A log callback. Accepts any callable (lambda, function, functor). It may be
 /// invoked concurrently from several threads; exceptions it throws are caught
@@ -532,15 +560,15 @@ using SzLogCallback = std::function<void(const SzLogRecord&)>;
 /// move-only). Destroying it unregisters the callback (RAII):
 ///
 /// - Outside any callback, the destructor calls SzLogging_unregisterCallback
-/// and
-///   then destroys the std::function before it returns.
+///   and then destroys the std::function before it returns.
 /// - Inside a callback, the destructor deactivates the callback (it is not
 ///   called again) and leaks it, leaving the native registration in place (see
 ///   the CALLBACK LIFETIME notes at the top of this header).
 ///
-/// On Senzing 4.5.0, destroy it only while nothing else logs (the usage rule).
-/// Keep the returned pointer in a named variable: discarding it unregisters the
-/// callback immediately.
+/// On Senzing 4.5.0, destroy it only while nothing else logs (the usage rule):
+/// declare the variable BEFORE the environment so it is destroyed after it, or
+/// call SzEnvironment::Destroy() first. Keep the returned pointer in a named
+/// variable: discarding it unregisters the callback immediately.
 class SzLogRegistration {
 public:
     /// Unregisters the callback unless Unregister() or Leak() already ran.
@@ -560,13 +588,14 @@ public:
 
     /// This callback's current minimum level (SzLogging_getCallbackLevel).
     /// Throws SzConfigurationException: requires Senzing >= 4.5.1 / 4.6.0.
-    virtual SzLogLevel GetLevel() = 0;
+    [[nodiscard]] virtual SzLogLevel Level() = 0;
 
     /// Unregisters now (same as destroying the registration). Idempotent.
     virtual void Unregister() = 0;
 
-    /// Keeps the callback registered for the rest of the process; the
-    /// destructor then does nothing and the callback is never freed.
+    /// Keeps the callback registered (and called) for the rest of the
+    /// process; the destructor then does nothing and the callback is never
+    /// freed. Its minimum level keeps bounding the effective level.
     virtual void Leak() = 0;
 
 protected:
@@ -632,7 +661,7 @@ public:
     /// Registers `callback` for messages from every thread
     /// (SzLogging_registerCallbackWithFormat). The returned registration
     /// unregisters when destroyed. While it lives, native lowers the effective
-    /// level to `options.GetMinLevel()` if needed.
+    /// level to `options.MinLevel()` if needed.
     ///
     /// Throws SzBadInputException for an empty callback or an out-of-range
     /// level/format; SzConfigurationException when called from inside a log
@@ -647,13 +676,13 @@ public:
     /// registration but never delivers to it (GDEV-4960), so on 4.5.0 this
     /// throws SzConfigurationException rather than registering a callback that
     /// never fires. Until then, register a process-wide callback and group
-    /// records by SzLogRecord::GetThreadHash().
+    /// records by SzLogRecord::ThreadHash().
     [[nodiscard]] virtual std::unique_ptr<SzLogRegistration>
     RegisterThreadLocalCallback(const SzLogCallbackOptions& options,
                                 SzLogCallback callback) = 0;
 
-    /// Makes `callback` the default output, at `options.GetMinLevel()` and in
-    /// `options.GetFormat()` (SzLogging_setDefaultCallback, then
+    /// Makes `callback` the default output, at `options.MinLevel()` and in
+    /// `options.Format()` (SzLogging_setDefaultCallback, then
     /// SzLogging_setDefaultFormatter for a format other than Legacy).
     ///
     /// There is no handle: the callback stays until SetDefaultOutput or another
@@ -687,7 +716,7 @@ public:
 
     /// The current default output (SzLogging_getDefaultOutput). Throws
     /// SzConfigurationException: requires Senzing >= 4.5.1 / 4.6.0.
-    virtual SzLogOutput GetDefaultOutput() = 0;
+    [[nodiscard]] virtual SzLogOutput GetDefaultOutput() = 0;
 
     /// Sets the default output's format (SzLogging_setDefaultFormatter).
     /// Registered callbacks keep their own format. Marks native logging as
@@ -699,7 +728,7 @@ public:
 
     /// The default output's format (SzLogging_getDefaultFormatter). Throws
     /// SzConfigurationException: requires Senzing >= 4.5.1 / 4.6.0.
-    virtual SzLogFormat GetDefaultFormat() = 0;
+    [[nodiscard]] virtual SzLogFormat GetDefaultFormat() = 0;
 
     /// Sets the default output's level (SzLogging_setLogLevel). Registered
     /// callbacks keep their own levels. Safe at any time, from any thread,
@@ -711,14 +740,17 @@ public:
     /// The default output's level, exactly what SetDefaultLogLevel set
     /// (SzLogging_getDefaultLogLevel). Throws SzConfigurationException:
     /// requires Senzing >= 4.5.1 / 4.6.0.
-    virtual SzLogLevel GetDefaultLogLevel() = 0;
+    [[nodiscard]] virtual SzLogLevel GetDefaultLogLevel() = 0;
 
     /// The effective level (SzLogging_getLogLevel): the minimum over the
     /// default output and every registered callback. A message below it is not
     /// even formatted. Safe at any time.
     ///
-    /// Throws SzException if native returns a value outside SzLogLevel.
-    virtual SzLogLevel GetEffectiveLogLevel() = 0;
+    /// Throws, for a negative native return (from Senzing >= 4.5.1 / 4.6.0
+    /// headers), SzBadInputException (-1, -2), SzUnrecoverableException (-3:
+    /// process exit in progress) or SzException (any other value, also a
+    /// non-negative value outside SzLogLevel).
+    [[nodiscard]] virtual SzLogLevel GetEffectiveLogLevel() = 0;
 
     /// Captures the records logged on the calling thread until
     /// SzLogCapture::Finish(): one thread-local registration
