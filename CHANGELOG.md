@@ -4,14 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-Versions follow `4.3.0-N`: `4.3.0` tracks the mirrored C# SDK API
-(`senzing-garage/sz-sdk-csharp@4.3.0`) and `-N` is this C++ SDK's release
-revision, incremented for changes made against the 4.3 line (mirrors Senzing's
-own `version-build` packaging scheme).
+Versions follow `X.Y.Z-N`: `X.Y.Z` is the **minimum Senzing version** this SDK
+requires (as in sz-rust-sdk) and `-N` is this C++ SDK's release revision against
+that minimum (mirrors Senzing's own `version-build` packaging scheme). CMake and
+vcpkg carry `X.Y.Z`; the tag and this file carry `-N`. Releases up to `4.3.0-2`
+used `4.3.0` for the mirrored C# SDK API version instead.
 
 ## [Unreleased]
 
-## [4.3.0-3] - 2026-11-21
+## [4.5.0-1] - 2026-11-21
 
 SzLogging (designed after sz-rust-sdk 4.5.0); the minimum Senzing version is now 4.5.0.
 
@@ -63,6 +64,9 @@ SzLogging (designed after sz-rust-sdk 4.5.0); the minimum Senzing version is now
 
 ### Changed
 
+- Versioning: `X.Y.Z` is now the minimum Senzing version (CMake/vcpkg `4.5.0`),
+  matching sz-rust-sdk; `-N` remains the C++ SDK revision. This release replaces
+  the briefly published `4.3.0-3`.
 - CI installs Senzing 4.5.0 (`senzingsdk-runtime` + `senzingsdk-setup`; the
   4.3.x `senzingsdk-tools` pin is no longer needed) and asserts
   `libSzLogging.h` is present.

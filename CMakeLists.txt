@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(sz_cpp_sdk LANGUAGES CXX VERSION 4.3.0)
+project(sz_cpp_sdk LANGUAGES CXX VERSION 4.5.0)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
