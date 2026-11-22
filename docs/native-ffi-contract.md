@@ -157,16 +157,20 @@ Redo: `Sz_processRedoRecord(redoRecord) -> long long`,
 ## Logging (`SzLogging_*`, Senzing >= 4.5.0)
 
 Header `libSzLogging.h` (same include dir); the symbols are exported by `libSz` itself (no
-separate library). No init, no per-module last-exception state; the 4.5.0 setters return `void`.
+separate library). No init, no per-module last-exception state. The 4.5.0 setters return `void`;
+from the Senzing 4.5.1 / 4.6.0 headers `SzLogging_setLogLevel`, `SzLogging_setDefaultFormatter`
+and `SzLogging_setDefaultOutput` return `int` (0 ok, -1 invalid argument, -2 output could not be
+opened, -3 process exit in progress). This SDK binds the 4.5.0 API and ignores that result (it
+compiles against either header); `detail::CheckLogStatus` is the mapping for when it is wired.
 
 | Function | Used by |
 |---|---|
 | `void* SzLogging_registerCallbackWithFormat(SzLogCallback, void* user_data, int min_level, int format)` | `RegisterCallback` (null handle → `SzUnrecoverableException`) |
 | `void SzLogging_unregisterCallback(void* handle)` | `SzLogRegistration` destructor / `Unregister` |
 | `void* SzLogging_setDefaultCallback(SzLogCallback, void* user_data, int min_level)` | `SetDefaultCallback` (always returns null) |
-| `void SzLogging_setDefaultFormatter(int format)` | `SetDefaultFormat`; after `SetDefaultCallback` for non-Legacy |
-| `void SzLogging_setDefaultOutput(int output_type, const char* param)` | `SetDefaultOutput` (`param` = file path or null) |
-| `void SzLogging_setLogLevel(int level)` / `int SzLogging_getLogLevel()` | `SetDefaultLogLevel` / `GetEffectiveLogLevel` |
+| `void SzLogging_setDefaultFormatter(int format)` (`int` from 4.5.1/4.6.0 headers; ignored) | `SetDefaultFormat`; after `SetDefaultCallback` for non-Legacy |
+| `void SzLogging_setDefaultOutput(int output_type, const char* param)` (`int` from 4.5.1/4.6.0 headers; ignored) | `SetDefaultOutput` (`param` = UTF-8 file path or null) |
+| `void SzLogging_setLogLevel(int level)` (`int` from 4.5.1/4.6.0 headers; ignored) / `int SzLogging_getLogLevel()` | `SetDefaultLogLevel` / `GetEffectiveLogLevel` (negative → `-1`/`-2` `SzBadInputException`, `-3` `SzUnrecoverableException`, other `SzException`) |
 | `void* SzLogging_registerCallback(...)` / `SzLogging_registerThreadLocalCallback(...)` | **not used** (the former is Legacy-only; the latter never delivers on 4.5.0, GDEV-4960) |
 
 `SzLogCallback` is `void(int level, const char* module, const char* message, void* user_data)`.
@@ -174,7 +178,9 @@ Ownership: `user_data` is an SDK-owned slot (the `std::function` + an active fla
 `SzLogging_unregisterCallback` returned outside any callback, otherwise deliberately leaked;
 `module`/`message` are native-owned, NUL-terminated UTF-8, valid only for the call (`SzLogRecord`
 borrows them). The trampoline is `noexcept` and swallows every exception. The file path is passed
-as a NUL-terminated narrow string that native copies.
+as a NUL-terminated UTF-8 string (`std::filesystem::path::u8string()`, on every platform, as the
+Rust SDK does) that native copies; the SDK's pre-open check opens the path in the platform's native
+encoding (`_wfopen` on Windows).
 
 ## Shared
 

@@ -12,6 +12,61 @@ used `4.3.0` for the mirrored C# SDK API version instead.
 
 ## [Unreleased]
 
+SzLogging review fixes (still Senzing 4.5.0 minimum).
+
+### Changed
+
+- **Breaking:** logging value accessors are property-style, named like the C#
+  properties they will become (as `SzException::ErrorCode()`), which also avoids
+  the Win32 `GetMessage` macro:
+  - `SzLogRecord`: `GetLevel` → `Level`, `GetModule` → `Module`,
+    `GetThreadHash` → `ThreadHash`, `GetMessage` → `Message`, `GetRawModule` →
+    `RawModule`, `GetTimestamp` → `Timestamp`, `GetTimestampNs` →
+    `TimestampNs`, `GetThreadID` → `ThreadID`.
+  - `SzLogOutput`: `GetOutputType` → `OutputType`, `GetPath` → `Path`
+    (`IsAppend` unchanged).
+  - `SzLogCallbackOptions`: `GetMinLevel` → `MinLevel`, `GetFormat` → `Format`.
+  - `SzLogRegistration`: `GetLevel` → `Level` (`SetLevel` unchanged).
+  - `SzLogging` methods (`Get*` / `Set*`, `RegisterCallback`, ...) are unchanged.
+- `[[nodiscard]]` on `SzLogRegistration::Level`, `GetDefaultOutput`,
+  `GetDefaultFormat`, `GetDefaultLogLevel` and `GetEffectiveLogLevel`.
+- The "needs a newer Senzing" error text now reads "requires Senzing >=
+  4.5.1/4.6.0 support in this SDK", accurate whichever `libSzLogging.h` the SDK
+  is compiled against.
+
+### Added
+
+- `operator<<` for `SzLogRecord` and `SzLogEntry` (streams the message, like
+  the Rust SDK's `Display`).
+
+### Fixed
+
+- `RegisterCallback` could leak the callback slot, with the native registration
+  left live and no handle, if allocating the handle threw `std::bad_alloc` after
+  native accepted the registration. Everything is now allocated before the native
+  call.
+- Native negative returns map like the Rust SDK (`status_error` /
+  `level_from_native`): `-1`/`-2` → `SzBadInputException`, `-3` (process exit
+  in progress) → `SzUnrecoverableException`, other → `SzException`.
+  `GetEffectiveLogLevel` threw a plain `SzException` for `-3`.
+- File output paths reach native as UTF-8 (`path::u8string()`) on every
+  platform, and the pre-open check uses the platform's native path encoding
+  (`_wfopen` on Windows). Previously `path::string()` used the ANSI code page on
+  Windows.
+- Docs: a registration declared after the environment is destroyed first at scope
+  exit, while the engine may still log (a use-after-free on 4.5.0). Declare it
+  before the environment or call `Destroy()` explicitly; the example now does.
+  A registration leaked inside a callback keeps the effective level lowered (and
+  native formatting for it) for the rest of the process. README/docs use
+  block-scope using-declarations instead of `using namespace senzing::sdk;`
+  (the C header `libSzLogging.h` declares the same global type names, plus
+  `SzLogRecord` from Senzing 4.6.0). The FFI contract notes
+  the setters return `int` from the 4.5.1 / 4.6.0 headers (ignored on 4.5.0).
+- Tests: the native status mapping; a `SetDefaultLogLevel` before init survives
+  engine init (even with `VerboseLogging(true)`); `VerboseLogging(true)` with no
+  user configuration yields TRACE; registrations survive `Reinitialize()`; a
+  non-ASCII file output path; record/entry streaming.
+
 ## [4.5.0-1] - 2026-11-21
 
 SzLogging (designed after sz-rust-sdk 4.5.0); the minimum Senzing version is now 4.5.0.

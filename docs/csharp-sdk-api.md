@@ -77,31 +77,41 @@ unique_ptr<SzLogRegistration> RegisterCallback(SzLogCallbackOptions options, SzL
 unique_ptr<SzLogRegistration> RegisterThreadLocalCallback(SzLogCallbackOptions options, SzLogCallback callback); // SZ-FUTURE
 void        SetDefaultCallback(SzLogCallbackOptions options, SzLogCallback callback);
 void        SetDefaultOutput(SzLogOutput output);
-SzLogOutput GetDefaultOutput();                  // SZ-FUTURE
+[[nodiscard]] SzLogOutput GetDefaultOutput();    // SZ-FUTURE
 void        SetDefaultFormat(SzLogFormat format);
-SzLogFormat GetDefaultFormat();                  // SZ-FUTURE
+[[nodiscard]] SzLogFormat GetDefaultFormat();    // SZ-FUTURE
 void        SetDefaultLogLevel(SzLogLevel level);
-SzLogLevel  GetDefaultLogLevel();                // SZ-FUTURE
-SzLogLevel  GetEffectiveLogLevel();
+[[nodiscard]] SzLogLevel GetDefaultLogLevel();   // SZ-FUTURE
+[[nodiscard]] SzLogLevel GetEffectiveLogLevel();
 SzLogCapture CaptureThreadLogs(SzLogCallbackOptions options);   // non-virtual helper; SZ-FUTURE
 ```
 
 Supporting types: `SzLogLevel` (`Trace`..`Critical`, `Off`; native values 0-6), `SzLogFormat`
 (`Legacy`, `Jsonl`, `Bare`, `Default`), `SzLogOutput` (`Stderr()`, `Stdout()`, `File(path)`,
-`AppendFile(path)` SZ-FUTURE, `Null()`, `Callback()` get-only), `SzLogCallbackOptions`
-(implicit from `SzLogLevel`; default format **Bare**; `WithFormat`), `SzLogRecord` (borrowed
-view valid only inside the callback; `GetLevel`, `GetModule`, `GetThreadHash`, `GetMessage`,
-`GetRawModule`, `GetTimestamp`/`GetTimestampNs`/`GetThreadID` = `nullopt` on 4.5.0, `ToEntry`),
-`SzLogEntry` (owned copy), `SzLogCallback` (`std::function<void(const SzLogRecord&)>`),
-`SzLogRegistration` (RAII: destruction unregisters; `SetLevel`/`GetLevel` SZ-FUTURE,
-`Unregister`, `Leak`), `SzLogCapture` (`Finish`), and `ToString` / `ParseSzLogLevel` /
-`ParseSzLogFormat`.
+`AppendFile(path)` SZ-FUTURE, `Null()`, `Callback()` get-only; `OutputType()`, `Path()`,
+`IsAppend()`), `SzLogCallbackOptions` (implicit from `SzLogLevel`; default format **Bare**;
+`WithFormat`; `MinLevel()`, `Format()`), `SzLogRecord` (borrowed view valid only inside the
+callback; `Level()`, `Module()`, `ThreadHash()`, `Message()`, `RawModule()`,
+`Timestamp()`/`TimestampNs()`/`ThreadID()` = `nullopt` on 4.5.0, `ToEntry()`; `operator<<`
+streams the message), `SzLogEntry` (owned copy; `operator<<` streams the message),
+`SzLogCallback` (`std::function<void(const SzLogRecord&)>`), `SzLogRegistration` (RAII:
+destruction unregisters; `SetLevel`/`Level()` SZ-FUTURE, `Unregister`, `Leak`), `SzLogCapture`
+(`Finish`), and `ToString` / `ParseSzLogLevel` / `ParseSzLogFormat`.
+
+Accessor naming: value accessors on these types are **property-style** (`Level()`, not
+`GetLevel()`), because they map to C# properties (`record.Level`), matching this SDK's own
+precedent `SzException::ErrorCode()` (C# `ErrorCode` property). It also avoids the Win32
+`GetMessage` macro. Methods that act or mirror real methods (`SetLevel`, `RegisterCallback`,
+`SetDefault*`, `GetDefault*`, `GetEffectiveLogLevel`) keep method names. Renamed in 4.5.0-2
+(4.5.0-1 shipped `Get*` accessors).
 
 Rust → C++ mapping notes: Rust's `SzLoggingExt` closure helpers (`register`, `set_default`,
 `register_thread_local`) collapse into the methods above because `std::function` accepts any
 callable and `SzLogCallbackOptions` converts from `SzLogLevel`; `SzError::Configuration` →
 `SzConfigurationException`, `BadInput` → `SzBadInputException`, `Unrecoverable` →
-`SzUnrecoverableException`, `Unknown` → `SzException`; Rust panics → C++ exceptions (caught at the
+`SzUnrecoverableException`, `Unknown` → `SzException` (native status/level returns: `-1`/`-2` →
+`SzBadInputException`, `-3` → `SzUnrecoverableException`, other → `SzException`, as Rust's
+`status_error` / `level_from_native`); Rust panics → C++ exceptions (caught at the
 native boundary and discarded). Rust's optional `log`-crate forwarding has no C++ counterpart.
 
 Rules (identical to Rust): all state is native; on 4.5.0 change registrations / default
