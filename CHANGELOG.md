@@ -12,6 +12,8 @@ used `4.3.0` for the mirrored C# SDK API version instead.
 
 ## [Unreleased]
 
+## [4.5.0-2] - 2026-11-22
+
 SzLogging review fixes (still Senzing 4.5.0 minimum).
 
 ### Changed
